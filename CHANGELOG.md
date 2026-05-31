@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [0.4.1]
+
+### Fixed
+
+- `--atomic-editor-selection-bg` now actually takes effect. CodeMirror's base
+  theme styles the active selection with a deeper selector than the package
+  used (`&dark.cm-focused > .cm-scroller > .cm-selectionLayer
+  .cm-selectionBackground`), so the token was silently overridden by the
+  default selection color. The rule now mirrors that selector depth (the same
+  approach `oneDark` takes), so the configured selection color applies in both
+  themes.
+
 ## [0.4.0]
 
 ### Added
