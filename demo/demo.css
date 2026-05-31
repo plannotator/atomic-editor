@@ -24,6 +24,7 @@
   --atomic-editor-link: #818cf8;
   --atomic-editor-link-hover: #a5b4fc;
   --atomic-editor-code-bg: #242329;
+  --atomic-editor-selection-bg: color-mix(in srgb, #7c3aed 45%, transparent);
 }
 
 :root[data-theme='light'] {
@@ -40,6 +41,7 @@
   --atomic-editor-link: #6d28d9;
   --atomic-editor-link-hover: #7c3aed;
   --atomic-editor-code-bg: #f3f1fb;
+  --atomic-editor-selection-bg: color-mix(in srgb, #8250df 26%, transparent);
 }
 
 :root {
@@ -412,12 +414,32 @@ a.demo-pill:hover {
   background-position: center top;
 }
 
-/* The reading column as a "page" floating on the grid. */
-.demo-editor-pane .cm-content {
-  background: var(--atomic-editor-bg);
-  border-inline: 1px solid var(--atomic-editor-border);
+/* The reading column as a "page" floating on the grid. The page fill
+ * canNOT go on .cm-content: CodeMirror draws its selection in a layer at
+ * z-index -2, BEHIND the content, so an opaque content background hides
+ * the selection entirely. Instead we paint the page as a scroller
+ * ::before at z-index -3 — behind the selection layer (so the highlight
+ * shows on top of it) but above the pane's graph-paper grid (so the
+ * column reads as a solid sheet while the grid stays in the margins).
+ * .cm-content keeps only the 1px side rules as the page edges. */
+.demo-editor-pane .cm-scroller {
+  position: relative;
 }
 
+.demo-editor-pane .cm-scroller::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(70ch + 1rem), 100%);
+  background: var(--atomic-editor-bg);
+  z-index: -3;
+  pointer-events: none;
+}
+
+.demo-editor-pane .cm-content,
 .demo-editor-pane .cm-panels {
   border-inline: 1px solid var(--atomic-editor-border);
 }

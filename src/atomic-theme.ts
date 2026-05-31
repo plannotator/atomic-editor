@@ -58,10 +58,18 @@ export const atomicEditorTheme: Extension = EditorView.theme(
       borderLeftColor: 'var(--atomic-editor-accent-bright, #a78bfa)',
       borderLeftWidth: '2px',
     },
-    '&.cm-focused .cm-selectionBackground, ::selection, .cm-selectionBackground': {
-      backgroundColor:
-        'var(--atomic-editor-selection-bg, color-mix(in srgb, #7c3aed 28%, #1e1e1e 72%))',
-    },
+    // The focused-selection selector must mirror CodeMirror's base-theme
+    // path (`&dark.cm-focused > .cm-scroller > .cm-selectionLayer
+    // .cm-selectionBackground`, which paints a default `#233`). A flat
+    // `.cm-selectionBackground` rule loses on specificity, so the
+    // `--atomic-editor-selection-bg` token silently had no effect. This
+    // matches the depth (the same approach oneDark uses) so the token
+    // actually wins, while keeping the unfocused + native fallbacks.
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection':
+      {
+        backgroundColor:
+          'var(--atomic-editor-selection-bg, color-mix(in srgb, #7c3aed 28%, #1e1e1e 72%))',
+      },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
     },
