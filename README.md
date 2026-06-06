@@ -19,7 +19,7 @@ base — extracted to stand on its own, and hardened on real user documents.
 
 ## Features
 
-- **Live preview, not a preview pane.** Headings, emphasis, links, images,
+- **Live preview.** Headings, emphasis, links, images,
   and tables render inline; the raw syntax appears only on the line your
   cursor is on, then tucks itself away when you move on.
 - **Raw markdown is the source of truth.** Every decoration is view-only, so
