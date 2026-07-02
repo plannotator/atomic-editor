@@ -43,6 +43,7 @@ import {
 import { atomicEditorTheme, atomicMarkdownSyntax } from './atomic-theme';
 import { autoCloseCodeFence, extendEmphasisPair } from './edit-helpers';
 import { frontmatter } from './frontmatter';
+import { frontmatterProperties } from './frontmatter-properties';
 import { imageBlocks } from './image-blocks';
 import { inlinePreview } from './inline-preview';
 import { tables } from './table-widget';
@@ -299,6 +300,7 @@ export function AtomicCodeMirrorEditor({
           tables({
             onLinkClick: (url) => onLinkClickRef.current?.(url),
           }),
+          frontmatterProperties(),
           imageBlocks(),
           inlinePreview({
             onLinkClick: (url) => onLinkClickRef.current?.(url),

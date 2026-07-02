@@ -14,6 +14,7 @@ export type { InlinePreviewConfig } from './inline-preview';
 export { imageBlocks } from './image-blocks';
 export { tables } from './table-widget';
 export type { TablesConfig } from './table-widget';
+export { frontmatterProperties } from './frontmatter-properties';
 export { wikiLinks } from './wiki-links';
 export type {
   WikiLinkResolvedTarget,
