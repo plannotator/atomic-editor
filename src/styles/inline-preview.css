@@ -744,9 +744,9 @@
 .cm-line.cm-atomic-frontmatter {
   font-family: var(--atomic-editor-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.85em;
-  color: var(--atomic-editor-fg-muted, #9a9a9a);
+  color: var(--atomic-editor-fg-muted, #888);
 }
 
 .cm-atomic-frontmatter-mark {
-  color: var(--atomic-editor-fg-faint, #6b6b6b);
+  color: var(--atomic-editor-fg-faint, #666);
 }

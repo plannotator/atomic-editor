@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { createRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
+import { EditorView } from '@codemirror/view';
 import {
   AtomicCodeMirrorEditor,
   type AtomicCodeMirrorEditorHandle,
@@ -108,5 +109,49 @@ describe('frontmatter parsing', () => {
     const { host, handle } = mount('---\n---\n\nBody.\n');
     expect(host.querySelectorAll('.cm-line.cm-atomic-frontmatter').length).toBe(2);
     expect(handle.current?.getMarkdown()).toBe('---\n---\n\nBody.\n');
+  });
+
+  // Incremental-reparse coverage: the block parser only fires at
+  // lineStart 0, so it must keep firing when lezer reparses after
+  // edits inside (or around) the block, not just on a fresh mount.
+  it('survives an edit inside the frontmatter body', () => {
+    const { host, handle } = mount(WITH_FRONTMATTER);
+    const view = EditorView.findFromDOM(host as HTMLElement);
+    expect(view).not.toBeNull();
+    act(() => {
+      // Append to the `title:` line (offset 21 = end of "Spike Plan").
+      view!.dispatch({ changes: { from: 21, insert: ' v2' } });
+    });
+    expect(handle.current?.getMarkdown()).toBe(
+      WITH_FRONTMATTER.replace('Spike Plan', 'Spike Plan v2'),
+    );
+    expect(host.querySelectorAll('.cm-line.cm-atomic-frontmatter').length).toBe(5);
+    expect(host.querySelector('.cm-atomic-h2')).toBeNull();
+    expect(host.querySelector('.cm-atomic-hr')).toBeNull();
+  });
+
+  it('snaps an unclosed fence into frontmatter once the close is typed', () => {
+    const { host, handle } = mount('---\ntitle: draft\n# Heading\n');
+    const view = EditorView.findFromDOM(host as HTMLElement);
+    act(() => {
+      // Type the closing fence between the YAML line and the heading
+      // (position 17 = just after the newline that ends `title: draft`).
+      view!.dispatch({ changes: { from: 17, insert: '---\n' } });
+    });
+    expect(handle.current?.getMarkdown()).toBe('---\ntitle: draft\n---\n# Heading\n');
+    expect(host.querySelectorAll('.cm-line.cm-atomic-frontmatter').length).toBe(3);
+    // The heading is outside the block again.
+    expect(host.querySelector('.cm-atomic-h1')).not.toBeNull();
+  });
+
+  it('reverts to plain markdown when the opening fence is deleted', () => {
+    const { host, handle } = mount(WITH_FRONTMATTER);
+    const view = EditorView.findFromDOM(host as HTMLElement);
+    act(() => {
+      // Delete the opening `---\n`.
+      view!.dispatch({ changes: { from: 0, to: 4 } });
+    });
+    expect(handle.current?.getMarkdown()).toBe(WITH_FRONTMATTER.slice(4));
+    expect(host.querySelector('.cm-atomic-frontmatter')).toBeNull();
   });
 });
