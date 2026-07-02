@@ -20,6 +20,14 @@ fork of `@atomic-editor/editor`; upstream base: 0.4.3).
   the YAML body plus closing fence as a setext H2. Document bytes are
   untouched; round-trips remain byte-identical. Adds `@lezer/markdown` as a
   peer dependency.
+- **Frontmatter Properties widget** (Obsidian-style). A parseable frontmatter
+  block renders as a key/value grid: in-place key and value editing, list
+  values as chips with add/remove, add/remove property rows, and an "edit as
+  YAML source" toggle. Edits dispatch single-line document changes — editing
+  one property never rewrites a neighboring line's bytes. YAML the grid can't
+  faithfully represent (nested maps, comments, block scalars, unclosed fence)
+  falls back to the styled raw text. Exported standalone as
+  `frontmatterProperties()`.
 
 ## [0.4.3]
 
