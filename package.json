@@ -1,7 +1,7 @@
 {
-  "name": "@atomic-editor/editor",
-  "version": "0.4.3",
-  "description": "CodeMirror 6 markdown editor with Obsidian-style inline live preview.",
+  "name": "@plannotator/atomic-editor",
+  "version": "0.5.0",
+  "description": "CodeMirror 6 markdown editor with Obsidian-style inline live preview. Plannotator fork of atomic-editor (adds YAML frontmatter parsing).",
   "keywords": [
     "codemirror",
     "codemirror6",
@@ -14,13 +14,13 @@
   ],
   "license": "MIT",
   "author": "Kenny Bergquist",
-  "homepage": "https://github.com/kenforthewin/atomic-editor#readme",
+  "homepage": "https://github.com/plannotator/atomic-editor#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kenforthewin/atomic-editor.git"
+    "url": "git+https://github.com/plannotator/atomic-editor.git"
   },
   "bugs": {
-    "url": "https://github.com/kenforthewin/atomic-editor/issues"
+    "url": "https://github.com/plannotator/atomic-editor/issues"
   },
   "type": "module",
   "main": "./dist/index.js",

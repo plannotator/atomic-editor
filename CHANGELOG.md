@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [0.5.0] — @plannotator/atomic-editor
+
+First release under the `@plannotator/atomic-editor` name (Plannotator's
+fork of `@atomic-editor/editor`; upstream base: 0.4.3).
+
+### Added
+
+- YAML frontmatter parsing: a leading `---` block now parses as a dedicated
+  `Frontmatter` node and renders as a quiet monospace metadata block with
+  faded fences. Previously the opening fence parsed as a horizontal rule and
+  the YAML body plus closing fence as a setext H2. Document bytes are
+  untouched; round-trips remain byte-identical. Adds `@lezer/markdown` as a
+  peer dependency.
+
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part

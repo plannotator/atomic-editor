@@ -1,9 +1,16 @@
-# Atomic Editor
+# Atomic Editor (Plannotator fork)
+
+> This is [Plannotator](https://github.com/plannotator)'s fork of
+> [kenforthewin/atomic-editor](https://github.com/kenforthewin/atomic-editor),
+> published as `@plannotator/atomic-editor`. It tracks upstream closely and
+> carries a small set of changes we need (currently: YAML frontmatter
+> parsing), each also offered upstream as a PR. Unless you specifically want
+> those changes, prefer the original `@atomic-editor/editor`.
 
 **Obsidian-style live preview for [CodeMirror 6](https://codemirror.net/), in React.**
 
-[![npm version](https://img.shields.io/npm/v/@atomic-editor/editor?color=7c3aed&labelColor=2d2d2d)](https://www.npmjs.com/package/@atomic-editor/editor)
-[![license](https://img.shields.io/npm/l/@atomic-editor/editor?color=7c3aed&labelColor=2d2d2d)](./LICENSE)
+[![npm version](https://img.shields.io/npm/v/@plannotator/atomic-editor?color=7c3aed&labelColor=2d2d2d)](https://www.npmjs.com/package/@plannotator/atomic-editor)
+[![license](https://img.shields.io/npm/l/@plannotator/atomic-editor?color=7c3aed&labelColor=2d2d2d)](./LICENSE)
 
 A markdown editor where formatting renders as you type — headings, bold,
 tables, images, task lists — while the text underneath stays plain markdown.
