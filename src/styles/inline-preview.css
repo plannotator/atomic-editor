@@ -735,3 +735,18 @@
   --atomic-editor-hl-operator: #cf222e;
   --atomic-editor-hl-invalid: #82071e;
 }
+
+/* Frontmatter — the YAML metadata block opened by `---` on line 1.
+ * Parsed as a dedicated node (src/frontmatter.ts) so the HR/setext
+ * rules can't mangle it; rendered as a quiet monospace block. The
+ * `---` fences stay visible but faded (see FrontmatterMark in
+ * inline-preview.ts) so the block boundary is always editable. */
+.cm-line.cm-atomic-frontmatter {
+  font-family: var(--atomic-editor-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.85em;
+  color: var(--atomic-editor-fg-muted, #9a9a9a);
+}
+
+.cm-atomic-frontmatter-mark {
+  color: var(--atomic-editor-fg-faint, #6b6b6b);
+}

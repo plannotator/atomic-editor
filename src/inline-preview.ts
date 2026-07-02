@@ -185,6 +185,7 @@ const LINE_CLASS_BY_BLOCK: Record<string, string> = {
   SetextHeading2: 'cm-atomic-h2',
   Blockquote: 'cm-atomic-blockquote',
   FencedCode: 'cm-atomic-fenced-code',
+  Frontmatter: 'cm-atomic-frontmatter',
 };
 
 const HIDEABLE_SYNTAX = new Set([
@@ -211,6 +212,10 @@ const INLINE_MARK_CLASS: Record<string, string> = {
   InlineCode: 'cm-atomic-inline-code',
   Strikethrough: 'cm-atomic-strike',
   Link: 'cm-atomic-link',
+  // Frontmatter `---` fences stay visible (deliberately not in
+  // HIDEABLE_SYNTAX — hiding them would make the block boundary
+  // ambiguous while editing); this class just fades them.
+  FrontmatterMark: 'cm-atomic-frontmatter-mark',
 };
 
 class BulletWidget extends WidgetType {

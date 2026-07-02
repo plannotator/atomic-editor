@@ -42,6 +42,7 @@ import {
 
 import { atomicEditorTheme, atomicMarkdownSyntax } from './atomic-theme';
 import { autoCloseCodeFence, extendEmphasisPair } from './edit-helpers';
+import { frontmatter } from './frontmatter';
 import { imageBlocks } from './image-blocks';
 import { inlinePreview } from './inline-preview';
 import { tables } from './table-widget';
@@ -276,7 +277,11 @@ export function AtomicCodeMirrorEditor({
           // GFM via base: markdownLanguage — tables, strikethrough,
           // task lists, autolinks. Without this, the parser is pure
           // CommonMark and inline-preview never sees Task / Table.
-          markdown({ base: markdownLanguage, codeLanguages: [...codeLanguages] }),
+          markdown({
+            base: markdownLanguage,
+            codeLanguages: [...codeLanguages],
+            extensions: [frontmatter],
+          }),
           // Extend closeBrackets to markdown's symmetric delimiters.
           markdownLanguage.data.of({
             closeBrackets: { brackets: ['(', '[', '{', "'", '"', '*', '_', '`'] },
