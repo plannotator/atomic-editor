@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [0.5.1]
+
+### Added
+
+- Explicit TypeScript support declaration: `typescript` is now an **optional**
+  peer dependency at `^5.0.0 || ^6.0.0`. Note for the curious: 0.5.0 declared
+  no typescript peer at all (no package manager warned on TS 6 — we checked
+  npm, pnpm, and bun against the published manifest), so this release adds
+  the declaration rather than widening one. Optional peers emit no warning
+  when absent; consumers on TS 5 or 6 are equally supported.
+
 ## [0.5.0] — @plannotator/atomic-editor
 
 First release under the `@plannotator/atomic-editor` name (Plannotator's

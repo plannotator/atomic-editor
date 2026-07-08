@@ -1,6 +1,6 @@
 {
   "name": "@plannotator/atomic-editor",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "CodeMirror 6 markdown editor with Obsidian-style inline live preview. Plannotator fork of atomic-editor (adds YAML frontmatter parsing).",
   "keywords": [
     "codemirror",
@@ -90,7 +90,8 @@
     "@lezer/highlight": "^1.0.0",
     "@lezer/markdown": "^1.0.0",
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "typescript": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@codemirror/lang-cpp": {
@@ -133,6 +134,9 @@
       "optional": true
     },
     "@codemirror/legacy-modes": {
+      "optional": true
+    },
+    "typescript": {
       "optional": true
     }
   },
