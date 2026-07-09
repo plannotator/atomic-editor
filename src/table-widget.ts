@@ -1371,6 +1371,15 @@ function backspaceAtTableBoundary(view: EditorView): boolean {
 
 // ---- state field ----------------------------------------------------
 
+// True when any selection range touches the inclusive character span
+// [from, to] — used to detect the caret resting on a table's last line.
+function selectionOnLine(state: EditorState, from: number, to: number): boolean {
+  for (const range of state.selection.ranges) {
+    if (range.from <= to && range.to >= from) return true;
+  }
+  return false;
+}
+
 function buildTableWidgets(state: EditorState): DecorationSet {
   const ranges: Range<Decoration>[] = [];
   // Force full-doc parse so tables past the initial parsed region
@@ -1392,6 +1401,34 @@ function buildTableWidgets(state: EditorState): DecorationSet {
       // Block-replace needs whole-line coverage.
       const startLine = doc.lineAt(node.from);
       const endLine = doc.lineAt(node.to);
+
+      // Cursor-on-the-last-line exemption. Reveal the table's raw source
+      // (skip the widget) while the caret sits on its final line.
+      //
+      // WHY: the widget is an atomic block-replace. In a live EditorView,
+      // the moment a just-typed trailing line becomes part of the Table
+      // node (lezer absorbs `\n| … |` as a TableRow on the very next
+      // keystroke), the replace range grows to cover that line. With the
+      // caret at the table's end and no editable line beyond it, CM6 has
+      // no text position to host the DOM selection and drops it inside
+      // the widget's first contenteditable cell — so every further
+      // keystroke lands in that cell and corrupts the document instead of
+      // extending the row. (This never reproduces at pure-state level;
+      // it needs the view's DOM selection sync.) Leaving the caret's line
+      // as source keeps a real text position for it; the widget folds the
+      // row in as soon as the caret leaves. This mirrors the codebase's
+      // existing "reveal the block the cursor is on" convention
+      // (inline-preview) and matches Obsidian's table live-preview.
+      //
+      // Restricting the exemption to the LAST line (not the whole table)
+      // keeps the widget on mount for a document that opens with a table
+      // (caret at pos 0 sits on the header, not the last line), and cell
+      // editing is unaffected because it never moves CM's own selection
+      // into the table range.
+      if (selectionOnLine(state, endLine.from, endLine.to)) {
+        return false;
+      }
+
       ranges.push(
         Decoration.replace({
           widget: new TableWidget(model),
@@ -1445,6 +1482,21 @@ function changeAffectsTables(tr: Transaction, existing: DecorationSet): boolean 
   return affected;
 }
 
+// Whether a selection-only transaction could change which tables are
+// exempted from widget rendering. The exemption keys off the caret
+// sitting on a table's last line, and every table line contains a pipe,
+// so a rebuild is only warranted when the caret's old or new line holds
+// a `|`. Cheap (two `lineAt` lookups) and no forced parse.
+function selectionMayToggleTable(tr: Transaction): boolean {
+  if (tr.startState.selection.eq(tr.state.selection)) return false;
+  const oldHead = tr.startState.selection.main.head;
+  const newHead = tr.state.selection.main.head;
+  return (
+    tr.startState.doc.lineAt(oldHead).text.includes('|') ||
+    tr.state.doc.lineAt(newHead).text.includes('|')
+  );
+}
+
 const tableField = StateField.define<DecorationSet>({
   create: (state) => buildTableWidgets(state),
   update(deco, tr) {
@@ -1454,7 +1506,16 @@ const tableField = StateField.define<DecorationSet>({
     for (const effect of tr.effects) {
       if (effect.is(treeGrowthEffect)) return buildTableWidgets(tr.state);
     }
-    if (!tr.docChanged) return deco;
+    if (!tr.docChanged) {
+      // A caret move with no doc change can still flip a table between
+      // rendered and source (the cursor-on-last-line exemption in
+      // `buildTableWidgets`). Rebuild only when the caret enters or
+      // leaves a pipe-bearing line — the same cheap table proxy
+      // `changeAffectsTables` uses — so ordinary cursor motion through
+      // prose never pays for a rebuild or a forced parse.
+      if (selectionMayToggleTable(tr)) return buildTableWidgets(tr.state);
+      return deco;
+    }
     const mapped = deco.map(tr.changes);
     if (!changeAffectsTables(tr, deco)) return mapped;
     return buildTableWidgets(tr.state);
