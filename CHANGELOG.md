@@ -30,6 +30,20 @@ changes as the public surface stabilizes.
 Deliberately out of scope: column-width persistence (GFM has no width
 syntax), multi-line cell content, and row drag-reorder.
 
+### Fixed
+
+- Typing a new row directly beneath a rendered table no longer corrupts
+  the document (upstream bug): the instant lezer absorbed the just-typed
+  `| … |` line into the Table node, the atomic block widget grew over the
+  caret's line, CM6's DOM selection lost its text position, and further
+  keystrokes landed at a displaced position. A table now reveals its raw
+  source while the caret sits on its last line (the caret always owns a
+  real text position) and folds the finished row into the widget as soon
+  as the caret leaves — the same reveal-at-cursor convention the inline
+  preview uses. Selection-only caret moves rebuild the decorations only
+  when entering/leaving a pipe-bearing line, so ordinary cursor motion
+  costs nothing.
+
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part
