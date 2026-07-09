@@ -26,3 +26,16 @@ export { defaultSlashCommands, slashCommandSource, slashCommands } from './slash
 export type { SlashCommandItem, SlashCommandsConfig } from './slash-commands';
 export { atomicEditorTheme, atomicMarkdownSyntax } from './atomic-theme';
 export { autoCloseCodeFence, extendEmphasisPair } from './edit-helpers';
+export { selectionToolbar } from './selection-toolbar';
+export type { SelectionToolbarConfig } from './selection-toolbar';
+export {
+  applyFormat,
+  getActiveFormats,
+  inlineFormattingAllowed,
+  toggleBold,
+  toggleInlineCode,
+  toggleItalic,
+  toggleLink,
+  toggleStrikethrough,
+} from './formatting-commands';
+export type { InlineFormat } from './formatting-commands';

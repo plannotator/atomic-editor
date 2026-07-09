@@ -16,6 +16,19 @@ changes as the public surface stabilizes.
   quote, code block, table, divider, link, image). Opt-in via the new
   `slashCommands()` extension factory; custom items and default replacement
   via `SlashCommandsConfig`.
+- `selectionToolbar()` — an opt-in floating formatting bar (bubble menu)
+  shown above a non-empty selection, with bold / italic / strikethrough /
+  inline-code / link toggle buttons, active-state highlighting, a bundled
+  keymap (`Mod-b`, `Mod-i`, `Mod-Shift-x`, `Mod-e`, `Mod-k`), and
+  `--atomic-editor-*` theming. Configurable button set via
+  `SelectionToolbarConfig`.
+- Byte-exact inline formatting toggle commands (`toggleBold`,
+  `toggleItalic`, `toggleStrikethrough`, `toggleInlineCode`, `toggleLink`)
+  plus the state-level helpers `applyFormat`, `getActiveFormats`, and
+  `inlineFormattingAllowed`. Unwraps delete exactly the marker bytes read
+  from the syntax tree; wraps trim whitespace out of the marked range and
+  refuse anything that would produce broken markdown (multi-line ranges,
+  marker-boundary crossings, code/frontmatter contexts).
 
 ### Changed
 

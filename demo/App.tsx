@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AtomicCodeMirrorEditor,
+  selectionToolbar,
   slashCommands,
   wikiLinks,
   type AtomicCodeMirrorEditorHandle,
@@ -228,6 +229,7 @@ export function App() {
         },
         openOnClick: true,
       }),
+      selectionToolbar(),
     ],
     [],
   );
