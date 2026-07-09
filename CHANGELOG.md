@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [Unreleased]
+
+### Added
+
+- `selectionToolbar()` — an opt-in floating formatting bar (bubble menu)
+  shown above a non-empty selection, with bold / italic / strikethrough /
+  inline-code / link toggle buttons, active-state highlighting, a bundled
+  keymap (`Mod-b`, `Mod-i`, `Mod-Shift-x`, `Mod-e`, `Mod-k`), and
+  `--atomic-editor-*` theming. Configurable button set via
+  `SelectionToolbarConfig`.
+- Byte-exact inline formatting toggle commands (`toggleBold`,
+  `toggleItalic`, `toggleStrikethrough`, `toggleInlineCode`, `toggleLink`)
+  plus the state-level helpers `applyFormat`, `getActiveFormats`, and
+  `inlineFormattingAllowed`. Unwraps delete exactly the marker bytes read
+  from the syntax tree; wraps trim whitespace out of the marked range and
+  refuse anything that would produce broken markdown (multi-line ranges,
+  marker-boundary crossings, code/frontmatter contexts).
+
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part
