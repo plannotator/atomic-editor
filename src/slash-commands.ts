@@ -1,4 +1,4 @@
-import { autocompletion, snippet, type Completion, type CompletionContext, type CompletionResult, type CompletionSource } from '@codemirror/autocomplete';
+import { autocompletion, pickedCompletion, snippet, type Completion, type CompletionContext, type CompletionResult, type CompletionSource } from '@codemirror/autocomplete';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
@@ -6,9 +6,13 @@ import { syntaxTree } from '@codemirror/language';
 /**
  * One entry in the slash-command menu. The menu is pure UI until the
  * user picks an entry: selecting one replaces the typed `/query` text
- * with the item's snippet, which is the only document mutation the
- * extension ever makes (and it is user-triggered, so it honors the
- * "never change text the user didn't type" rule).
+ * with the item's snippet (or its custom `apply` handler), which is the
+ * only document mutation the extension ever makes (and it is
+ * user-triggered, so it honors the "never change text the user didn't
+ * type" rule).
+ *
+ * An item must provide `snippet` or `apply` (`apply` wins when both are
+ * present); items with neither are dropped from the options.
  */
 export interface SlashCommandItem {
   /** Menu label; the text the user types after `/` is fuzzy-matched against it. */
@@ -21,7 +25,14 @@ export interface SlashCommandItem {
    * `${name}` a tab stop pre-filled with placeholder text. Templates
    * without fields insert plainly with the cursor at the end.
    */
-  snippet: string;
+  snippet?: string;
+  /**
+   * Custom insertion handler, wins over `snippet`. Unlike CM's own
+   * `Completion.apply` range, `from`..`to` covers the whole typed
+   * `/query` INCLUDING the trigger slash; the handler must dispatch its
+   * own transaction (and should annotate it with `pickedCompletion`).
+   */
+  apply?: (view: EditorView, completion: Completion, from: number, to: number) => void;
   /** Ranking boost (-99..99). Defaults carry descending boosts so they keep menu order; unboosted custom items sort after them, alphabetically. */
   boost?: number;
 }
@@ -51,6 +62,74 @@ const CODE_NODE_NAMES = new Set([
   'CommentBlock',
 ]);
 
+// The bytes the Table command inserts: a 2×2 table with a header row,
+// the delimiter, one empty body row, and a trailing newline so the
+// caret has a blank line to fall to.
+const TABLE_INSERT = '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n';
+
+/**
+ * Table insertion handler. The old snippet had tab-stop fields inside
+ * the pipe syntax, but the WYSIWYG table widget (a block
+ * `Decoration.replace` that renders unconditionally) covers the block
+ * the instant it parses, trapping the active snippet field invisibly
+ * beneath it. So instead of a snippet we drop plain table bytes and
+ * hand focus off to the widget's first header cell.
+ */
+function insertTable(
+  view: EditorView,
+  completion: Completion,
+  from: number,
+  to: number,
+): void {
+  view.dispatch({
+    changes: { from, to, insert: TABLE_INSERT },
+    // The selection is the fallback — the blank line after the table —
+    // used verbatim when the tables() extension isn't composed in or the
+    // widget lookup below fails.
+    selection: { anchor: from + TABLE_INSERT.length },
+    scrollIntoView: true,
+    annotations: pickedCompletion.of(completion),
+  });
+
+  // Best-effort focus handoff to the widget's first header cell,
+  // mirroring `appendRow` in table-widget.ts. This is a deliberate soft
+  // contract with table-widget's DOM class names — no import, no hard
+  // dependency: when tables() is absent the whole step no-ops and the
+  // fallback caret stands. Double-rAF because the first rAF only
+  // guarantees CM6 has processed the dispatch; the second ensures the
+  // widget DOM has painted so focus commands don't get lost.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const tables = view.dom.querySelectorAll<HTMLElement>('.cm-atomic-table');
+      for (const el of tables) {
+        let pos: number;
+        try {
+          pos = view.posAtDOM(el);
+        } catch {
+          // posAtDOM can throw on detached/transitional DOM nodes —
+          // skip and keep looking.
+          continue;
+        }
+        if (pos !== from) continue;
+        const source = el.querySelector<HTMLElement>(
+          'thead th .cm-atomic-table-cell-source',
+        );
+        if (!source) return;
+        source.focus();
+        // Select the whole 'Column 1' placeholder so typing immediately
+        // replaces it.
+        const range = document.createRange();
+        range.selectNodeContents(source);
+        const sel = window.getSelection();
+        if (!sel) return;
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+    });
+  });
+}
+
 /**
  * The twelve built-in block insertions, in menu order. Boosts descend
  * from 12 so an empty query renders them exactly in this sequence;
@@ -67,12 +146,7 @@ export const defaultSlashCommands: readonly SlashCommandItem[] = [
   // Two anonymous tab stops: the parser treats each `${}` as an
   // independent field, so Tab moves from fence language to body.
   { label: 'Code block', detail: '```', snippet: '```${}\n${}\n```', boost: 5 },
-  {
-    label: 'Table',
-    detail: '2×2',
-    snippet: '| ${Column 1} | ${Column 2} |\n| --- | --- |\n| ${} | ${} |',
-    boost: 4,
-  },
+  { label: 'Table', detail: '2×2', apply: insertTable, boost: 4 },
   { label: 'Divider', detail: '---', snippet: '---', boost: 3 },
   { label: 'Link', detail: '[]()', snippet: '[${text}](${url})', boost: 2 },
   { label: 'Image', detail: '![]()', snippet: '![${alt}](${url})', boost: 1 },
@@ -92,19 +166,35 @@ export function slashCommandSource(config: SlashCommandsConfig = {}): Completion
     ? (config.items ?? [])
     : [...defaultSlashCommands, ...(config.items ?? [])];
 
-  // Build the options — and each item's snippet applier — once, not per
+  // Build the options — and each item's applier — once, not per
   // keystroke. `apply` extends the replaced range one char left (`from -
   // 1`) to swallow the trigger `/`, which the returned result's `from`
-  // deliberately leaves out of the fuzzy-match range (see below).
-  const options: Completion[] = items.map((item) => {
+  // deliberately leaves out of the fuzzy-match range (see below). Items
+  // with neither `apply` nor `snippet` are dropped (defensive).
+  const options: Completion[] = items.flatMap((item) => {
+    if (item.apply) {
+      const customApply = item.apply;
+      return [
+        {
+          label: item.label,
+          detail: item.detail,
+          boost: item.boost,
+          apply: (view: EditorView, completion: Completion, from: number, to: number) =>
+            customApply(view, completion, from - 1, to),
+        },
+      ];
+    }
+    if (item.snippet == null) return [];
     const applySnippet = snippet(item.snippet);
-    return {
-      label: item.label,
-      detail: item.detail,
-      boost: item.boost,
-      apply: (view: EditorView, completion: Completion, from: number, to: number) =>
-        applySnippet(view, completion, from - 1, to),
-    };
+    return [
+      {
+        label: item.label,
+        detail: item.detail,
+        boost: item.boost,
+        apply: (view: EditorView, completion: Completion, from: number, to: number) =>
+          applySnippet(view, completion, from - 1, to),
+      },
+    ];
   });
 
   return (context: CompletionContext): CompletionResult | null => {
@@ -178,6 +268,12 @@ const slashCommandTooltipTheme: Extension = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     fontFamily: 'var(--atomic-editor-font, system-ui, -apple-system, BlinkMacSystemFont, sans-serif)',
     fontSize: '0.875rem',
+    // The base autocomplete theme caps the list at 10em (~6 items); each
+    // option is ~25px (0.875rem type + 8px vertical padding), so 24em
+    // (336px at the list's 14px em) fits the 12 defaults with headroom —
+    // custom sets beyond ~13 items still scroll. EditorView.theme rules
+    // take precedence over base themes, so this override sticks.
+    maxHeight: '24em',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
     padding: '4px 10px',
