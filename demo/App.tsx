@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AtomicCodeMirrorEditor,
+  slashCommands,
   wikiLinks,
   type AtomicCodeMirrorEditorHandle,
   type WikiLinkSuggestion,
@@ -231,6 +232,8 @@ export function App() {
     [],
   );
 
+  const editorExtensions = useMemo(() => [wikiLinkExtensions, slashCommands()], [wikiLinkExtensions]);
+
   const spotlight = useCallback((phrase: string) => {
     editorRef.current?.revealText(phrase);
   }, []);
@@ -403,7 +406,7 @@ export function App() {
             editorHandleRef={editorRef}
             onMarkdownChange={handleMarkdownChange}
             onLinkClick={(url) => window.open(url, '_blank', 'noopener,noreferrer')}
-            extensions={wikiLinkExtensions}
+            extensions={editorExtensions}
           />
         </div>
         {showSource && (

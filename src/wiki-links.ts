@@ -1,5 +1,5 @@
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension, type Text } from '@codemirror/state';
+import { EditorState, Prec, RangeSetBuilder, StateEffect, StateField, type Extension, type Text } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
@@ -205,11 +205,17 @@ function wikiLinkEditKeymap(): Extension {
 function wikiLinkCompletions(config: WikiLinksConfig): Extension {
   if (!config.suggest) return [];
 
-  return autocompletion({
-    activateOnTyping: true,
-    icons: false,
-    override: [async (context) => completionSource(context, config)],
-  });
+  // Registered through language data rather than the autocomplete
+  // `override` config so other autocompletion-based extensions (e.g.
+  // `slashCommands`) compose: two extensions passing `override` throw a
+  // config merge conflict, and `override` would suppress every other
+  // completion source anyway.
+  return [
+    autocompletion({ activateOnTyping: true, icons: false }),
+    EditorState.languageData.of(() => [
+      { autocomplete: (context: CompletionContext) => completionSource(context, config) },
+    ]),
+  ];
 }
 
 async function completionSource(
