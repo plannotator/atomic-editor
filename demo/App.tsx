@@ -219,6 +219,7 @@ export function App() {
           if (!linked) return null;
           return { target, label: linked.label, status: 'resolved' };
         },
+        preferResolvedLabel: true,
         onOpen: (target) => {
           const url = new URL(window.location.href);
           url.searchParams.set('linkedTarget', target);

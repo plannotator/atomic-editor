@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [Unreleased]
+
+### Added
+
+- **`preferResolvedLabel` on `WikiLinksConfig`.** With the flag on, labeled
+  wiki links (`[[target|label]]`) resolve to and display the document's
+  current title, falling back to the stored label while loading or when the
+  target is missing — so renames propagate to every rendered link without
+  rewriting document bytes. Purely a display preference; the source is never
+  touched. Defaults to false (existing behavior unchanged).
+
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part

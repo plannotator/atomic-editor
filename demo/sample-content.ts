@@ -380,8 +380,8 @@ export function generateSampleMarkdown(
   // `demo-*` targets line up with the resolver/suggester wired in the
   // demo App, so these render as resolved links and autocomplete works.
   sections.push(
-    'Wiki links connect notes. Type `[[` for autocomplete, and Cmd/Ctrl-click a rendered link to open it — inside inline code it stays raw:',
-    'Labeled: [[demo-project-atlas|Project Atlas]] · Bare: [[demo-meeting-notes]] · In code: `[[demo-project-atlas]]`',
+    'Wiki links connect notes. Type `[[` for autocomplete, and Cmd/Ctrl-click a rendered link to open it — inside inline code it stays raw. Labeled links resolve to the target\'s current title, so a rename shows through even when the stored label is stale:',
+    'Labeled: [[demo-project-atlas|Project Atlas]] · Bare: [[demo-meeting-notes]] · Renamed: [[demo-editor-roadmap|Roadmap (old name)]] · Missing: [[demo-deleted-page|Deleted Page]] · In code: `[[demo-project-atlas]]`',
   );
   // Secondary section — a deliberate "read the prose" zone after
   // the hero trio. Sets context for what the editor can do with

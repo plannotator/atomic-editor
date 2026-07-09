@@ -26,6 +26,25 @@ export interface WikiLinksConfig {
   serializeSuggestion?: (suggestion: WikiLinkSuggestion) => string;
   maxSuggestions?: number;
   debounceMs?: number;
+  /**
+   * When true, links that carry an explicit label (`[[target|label]]`)
+   * are also sent through `resolve`, and the rendered link prefers the
+   * target's current (resolved) title over the stored label snapshot —
+   * so renaming a document updates every rendered link without rewriting
+   * the bodies that reference it.
+   *
+   * Display precedence: resolved label (when resolution succeeds) →
+   * stored label (while loading, when `resolve` returns null, or when the
+   * resolution's status is 'missing') → the raw target (bare links only,
+   * unchanged). Status classes reflect the real resolution state for
+   * labeled links too.
+   *
+   * Purely a display preference: document bytes are NEVER rewritten, and
+   * placing the cursor inside a link still reveals the literal stored
+   * source. Defaults to false (stored label always wins, labeled links
+   * are never resolved).
+   */
+  preferResolvedLabel?: boolean;
 }
 
 interface ParsedWikiLink {
@@ -114,7 +133,8 @@ class WikiLinkResolverPlugin {
     const resolved = this.view.state.field(this.decorationField).resolved;
     for (const link of links) {
       if (
-        link.label ||
+        // Labeled links opt into resolution only under `preferResolvedLabel`.
+        (link.label && !this.config.preferResolvedLabel) ||
         isSelectionInsideLink(this.view.state, link) ||
         !shouldResolveWikiLink(this.config, link.target) ||
         this.pending.has(link.target) ||
@@ -334,16 +354,32 @@ function buildDecorations(
     }
 
     if (link.label && link.labelFrom != null && link.labelTo != null && link.labelFrom < link.labelTo) {
-      builder.add(link.from, link.labelFrom, Decoration.mark({ class: 'cm-atomic-wiki-link-hidden-syntax' }));
-      builder.add(
-        link.labelFrom,
-        link.labelTo,
-        Decoration.mark({
-          class: 'cm-atomic-wiki-link cm-atomic-wiki-link-resolved',
-          attributes: { 'data-wiki-link-target': link.target },
-        }),
-      );
-      builder.add(link.labelTo, link.to, Decoration.mark({ class: 'cm-atomic-wiki-link-hidden-syntax' }));
+      // Showing the STORED label keeps the document's own bytes visible
+      // (mark); showing a DIFFERENT resolved label requires replacing the
+      // visible text (widget). Both are pure decoration — the source is
+      // never touched.
+      if (!config.preferResolvedLabel || !config.resolve || !shouldResolveWikiLink(config, link.target)) {
+        // Flag off, or nothing to resolve against: today's byte-identical path.
+        addLabelMark(builder, link, link.labelFrom, link.labelTo, 'resolved');
+        continue;
+      }
+
+      const target = resolved.get(link.target);
+      if (target === undefined) {
+        // Resolution hasn't landed yet — hold the stored label.
+        addLabelMark(builder, link, link.labelFrom, link.labelTo, 'loading');
+        continue;
+      }
+      if (target === null || target.status === 'missing') {
+        // Resolve failed or the target is gone — the stored label stands in.
+        addLabelMark(builder, link, link.labelFrom, link.labelTo, 'missing');
+        continue;
+      }
+
+      // Resolution succeeded — prefer the current title, falling back to
+      // the stored label when the resolved title trims empty.
+      const resolvedLabel = target.label.trim() || link.label;
+      addLinkWidget(builder, link, resolvedLabel, target.status ?? 'resolved');
       continue;
     }
 
@@ -359,18 +395,53 @@ function buildDecorations(
         ? target.status ?? 'resolved'
         : 'missing';
 
-    builder.add(link.from, link.to, Decoration.mark({ class: 'cm-atomic-wiki-link-hidden-syntax' }));
-    builder.add(
-      link.to,
-      link.to,
-      Decoration.widget({
-        widget: new WikiLinkWidget(link.target, label, status),
-        side: -1,
-      }),
-    );
+    addLinkWidget(builder, link, label, status);
   }
 
   return builder.finish();
+}
+
+// Three-part mark: hide the `[[target|` prefix and the `]]` suffix, and
+// paint the label bytes in place. The visible text is the document's own
+// stored label, so no widget is needed — the status class just reflects
+// the (real) resolution state.
+function addLabelMark(
+  builder: RangeSetBuilder<Decoration>,
+  link: ParsedWikiLink,
+  labelFrom: number,
+  labelTo: number,
+  status: WikiLinkStatus,
+): void {
+  builder.add(link.from, labelFrom, Decoration.mark({ class: 'cm-atomic-wiki-link-hidden-syntax' }));
+  builder.add(
+    labelFrom,
+    labelTo,
+    Decoration.mark({
+      class: `cm-atomic-wiki-link cm-atomic-wiki-link-${status}`,
+      attributes: { 'data-wiki-link-target': link.target },
+    }),
+  );
+  builder.add(labelTo, link.to, Decoration.mark({ class: 'cm-atomic-wiki-link-hidden-syntax' }));
+}
+
+// Hide the whole `[[…]]` range and paint a widget in its place. Used
+// wherever the visible text differs from the source bytes: bare links,
+// and (under `preferResolvedLabel`) labeled links showing a resolved title.
+function addLinkWidget(
+  builder: RangeSetBuilder<Decoration>,
+  link: ParsedWikiLink,
+  label: string,
+  status: WikiLinkStatus,
+): void {
+  builder.add(link.from, link.to, Decoration.mark({ class: 'cm-atomic-wiki-link-hidden-syntax' }));
+  builder.add(
+    link.to,
+    link.to,
+    Decoration.widget({
+      widget: new WikiLinkWidget(link.target, label, status),
+      side: -1,
+    }),
+  );
 }
 
 function shouldResolveWikiLink(config: WikiLinksConfig, target: string): boolean {
