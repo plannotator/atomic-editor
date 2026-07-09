@@ -382,9 +382,10 @@ class CellFormattingBar implements PluginValue {
   }
 
   // Place the bar above the selection rect, in coordinates relative to
-  // `view.dom`. happy-dom returns zeroed rects (no layout), which is fine:
-  // the bar lands at the editor origin in tests and we only guard against
-  // NaN so nothing throws.
+  // `view.dom`, flipping below the selection when above would poke past
+  // the editor's top edge (see `cellBarTop`). happy-dom returns zeroed
+  // rects (no layout), which is fine: the bar lands near the editor
+  // origin in tests and we only guard against NaN so nothing throws.
   private reposition(): void {
     if (!this.bar) return;
     const selection = this.view.dom.ownerDocument.defaultView?.getSelection();
@@ -392,12 +393,32 @@ class CellFormattingBar implements PluginValue {
     const rect = selection.getRangeAt(0).getBoundingClientRect();
     const host = this.view.dom.getBoundingClientRect();
     let left = rect.left - host.left + this.view.dom.scrollLeft;
-    let top = rect.top - host.top + this.view.dom.scrollTop - this.bar.offsetHeight - 6;
+    let top =
+      cellBarTop(rect.top, rect.bottom, host.top, this.bar.offsetHeight) + this.view.dom.scrollTop;
     if (!Number.isFinite(left)) left = 0;
     if (!Number.isFinite(top)) top = 0;
     this.bar.style.left = `${Math.max(0, left)}px`;
     this.bar.style.top = `${Math.max(0, top)}px`;
   }
+}
+
+/**
+ * The bar's `top` within the host element: above the selection when it
+ * fits, flipped below when placing it above would poke past the host's
+ * top edge (the previous clamp-to-zero parked the bar OVER the first
+ * table row's selection instead of dodging it). Pure — exported for
+ * tests. Mirrors the main bar's flip-below behavior (which CM6 does for
+ * us there via the clamped `tooltipSpace`).
+ */
+export function cellBarTop(
+  rectTop: number,
+  rectBottom: number,
+  hostTop: number,
+  barHeight: number,
+  gap = 6,
+): number {
+  const above = rectTop - hostTop - barHeight - gap;
+  return above >= 0 ? above : rectBottom - hostTop + gap;
 }
 
 // Positioning basics only — all visual chrome comes from the shared

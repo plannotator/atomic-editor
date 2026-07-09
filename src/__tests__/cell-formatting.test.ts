@@ -4,6 +4,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import {
   activeCellFormats,
+  cellBarTop,
   cellFormatting,
   toggleCellRaw,
   type CellFormat,
@@ -328,5 +329,24 @@ describe('cellFormatting bar (DOM)', () => {
     setSelectionCharRange(source, 0, 0); // collapse
     document.dispatchEvent(new Event('selectionchange'));
     expect(bar.style.display).toBe('none');
+  });
+});
+
+describe('cellBarTop', () => {
+  it('places the bar above the selection when it fits', () => {
+    // Selection at viewport y=200..220 in a host starting at y=100, bar
+    // 34px tall: above-position = 200 - 100 - 34 - 6 = 60.
+    expect(cellBarTop(200, 220, 100, 34)).toBe(60);
+  });
+
+  it('flips below when above would poke past the host top edge', () => {
+    // Selection on the first row (y=110..130, host at 100): above would
+    // be 110 - 100 - 34 - 6 = -30 → flip below: 130 - 100 + 6 = 36.
+    expect(cellBarTop(110, 130, 100, 34)).toBe(36);
+  });
+
+  it('keeps the exact fit boundary above', () => {
+    // above === 0 exactly still fits (>= 0).
+    expect(cellBarTop(140, 160, 100, 34)).toBe(0);
   });
 });

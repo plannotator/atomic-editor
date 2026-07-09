@@ -4,7 +4,9 @@ import {
   ViewPlugin,
   keymap,
   showTooltip,
+  tooltips,
   type Command,
+  type Rect,
   type Tooltip,
   type TooltipView,
 } from '@codemirror/view';
@@ -133,9 +135,46 @@ export function selectionToolbar(config: SelectionToolbarConfig = {}): Extension
     suppressionPlugin,
     keymap.of(TOOLBAR_KEYMAP),
     toolbarChromeTheme,
+    toolbarTooltipSpace,
     cellFormatting(buttons),
   ];
 }
+
+/**
+ * Clamp a tooltip-space rectangle to the intersection of the editor's
+ * bounding rect and the window viewport. Pure — exported for tests.
+ */
+export function editorTooltipSpace(editor: Rect, winWidth: number, winHeight: number): Rect {
+  return {
+    top: Math.max(0, editor.top),
+    left: Math.max(0, editor.left),
+    right: Math.min(winWidth, editor.right),
+    bottom: Math.min(winHeight, editor.bottom),
+  };
+}
+
+// CM6's default tooltip space is the WINDOW viewport, so a tooltip on the
+// first line of an editor that sits below host chrome (a topbar, a modal
+// header) happily renders ABOVE the editor, on top of the host UI — where
+// the host can even intercept its clicks. Clamping the space to the
+// editor's own rect makes CM flip the bar below a first-line selection
+// and keep every tooltip inside the editor (Notion/Linear behavior).
+//
+// Facet semantics, verified in @codemirror/view: multiple `tooltips()`
+// configs never throw; for `tooltipSpace` the FIRST config that defines
+// one wins (extension order), so a consumer registering their own
+// tooltipSpace at higher precedence overrides this. Note this
+// deliberately affects EVERY tooltip in the editor (autocomplete
+// included) — menus staying inside the editor is the desired behavior
+// across the board.
+const toolbarTooltipSpace = tooltips({
+  tooltipSpace: (view) => {
+    // This @codemirror/view version has no `view.win`; resolve the window
+    // through the DOM like CM's own default `windowSpace` does.
+    const win = view.dom.ownerDocument.defaultView ?? window;
+    return editorTooltipSpace(view.dom.getBoundingClientRect(), win.innerWidth, win.innerHeight);
+  },
+});
 
 // The tooltip exists iff the selection is a single, non-empty range that
 // permits inline formatting AND we are not suppressed.
