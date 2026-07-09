@@ -419,6 +419,11 @@
   border-spacing: 0;
   width: 100%;
   font-family: var(--atomic-editor-font, system-ui, sans-serif);
+  /* Tables set their own type scale, slightly below the prose body —
+   * dense tabular content at full prose size + leading reads bloated
+   * (Linear does the same: table text sits under document text). */
+  font-size: 0.9375em;
+  line-height: 1.5;
 }
 
 /* Interior hairlines only — the container `.cm-atomic-table-inner`
@@ -428,7 +433,7 @@
 .cm-atomic-table td {
   border-right: 1px solid var(--atomic-editor-border, #3d3d3d);
   border-bottom: 1px solid var(--atomic-editor-border, #3d3d3d);
-  padding: 10px 14px;
+  padding: 6px 12px;
   text-align: left;
   vertical-align: top;
   min-width: 2em;
