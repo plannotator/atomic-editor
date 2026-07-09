@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [Unreleased]
+
+### Changed
+
+- Table visual pass, Linear-style: rounded 8px container with interior
+  hairlines only, shaded header row (`--atomic-editor-bg-panel`), roomier
+  cells (10px 14px), and a subtle row hover wash. Rendering-only — raw
+  markdown is untouched and stays single-line per cell.
+
+### Added
+
+- Table hover affordances for discoverability: a `+` on the right edge
+  (append column), a `+` on the bottom edge (append row), and a `⋯`
+  handle (top-right) that opens the existing table menu — all revealed on
+  hover/focus, absolutely positioned so the widget's measured height and
+  click routing below the table are unchanged. Edits flow through the
+  existing model→serialize→dispatch paths (byte-identical to the context
+  menu); right-click still works. Floating chrome uses the
+  `--atomic-editor-menu-*` tokens with dark fallbacks.
+
+Deliberately out of scope: column-width persistence (GFM has no width
+syntax), multi-line cell content, and row drag-reorder.
+
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part
