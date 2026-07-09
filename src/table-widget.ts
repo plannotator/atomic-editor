@@ -744,8 +744,10 @@ class TableWidget extends WidgetType {
     // Positioning context for the hover affordances. The controls anchor
     // to this inner box (which hugs the table via `width: max-content`),
     // NOT the wrap — so they sit on the table's own edges even after a
-    // horizontal scroll, and stay strictly inside the box so they never
-    // extend the wrap's scrollable overflow or its measured height (a
+    // horizontal scroll. They straddle the inner box's border (half in,
+    // half out) Linear-style; the wrap reserves a static padding gutter
+    // sized for that overhang, so revealing them on hover never extends
+    // the wrap's scrollable overflow or its measured height (a
     // taller/wider wrap desyncs CM6's heightmap and misroutes clicks
     // below the table — see the heightmap note in inline-preview.css).
     const inner = document.createElement('div');
