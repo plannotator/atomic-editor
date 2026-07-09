@@ -68,9 +68,10 @@ const BLOCK_BLOCKERS = new Set<string>([
 /**
  * State-level core. Returns the transaction spec for toggling `format`
  * on the main selection, or `null` when the toggle refuses (multi-cursor,
- * multi-line, blocked block context, a boundary-crossing wrap, etc. — see
- * the refusal rules in-file). Never returns a spec that alters bytes the
- * toggle doesn't own.
+ * blocked block context, a boundary-crossing wrap, etc. — see the refusal
+ * rules in-file). A multi-line selection is toggled per line (Obsidian
+ * style, see `applyFormatMultiline`) rather than refused. Never returns a
+ * spec that alters bytes the toggle doesn't own.
  */
 export function applyFormat(state: EditorState, format: InlineFormat): TransactionSpec | null {
   if (!inlineFormattingAllowed(state)) return null;
@@ -79,6 +80,14 @@ export function applyFormat(state: EditorState, format: InlineFormat): Transacti
   const from = sel.from;
   const to = sel.to;
   const tree = treeForSelection(state, to);
+
+  // A selection that crosses a hard line break is toggled line-by-line:
+  // inline emphasis can't span a `\n`, so a single pair of markers is
+  // impossible, but formatting each eligible line on its own is exactly
+  // what a user dragging across several lines expects.
+  if (state.doc.lineAt(from).number !== state.doc.lineAt(to).number) {
+    return applyFormatMultiline(state, tree, format, from, to);
+  }
 
   // A whitespace-only selection has no content to mark; `** **` is
   // invalid CommonMark, so refuse rather than emit dead markers.
@@ -95,10 +104,152 @@ export function applyFormat(state: EditorState, format: InlineFormat): Transacti
   return wrap(state, tree, format, from, to);
 }
 
+// One whitespace-trimmed span of a single line, in original doc coords.
+interface LineSegment {
+  from: number;
+  to: number;
+}
+
+// MULTI-LINE toggle: format each intersected line independently, all in a
+// single TransactionSpec so CM6 applies them together (one undo step).
+//
+// The decision is made ACROSS the eligible segments as a group, so a mixed
+// selection toggles the way a user expects: if every eligible line is
+// already formatted, the whole thing turns off; otherwise the unformatted
+// lines turn on and the already-formatted ones are left byte-untouched (no
+// double-wrap). A segment the wrap would mangle (crossing a marker
+// boundary) is skipped rather than corrupted, and if that leaves nothing
+// to do we refuse the whole toggle.
+function applyFormatMultiline(
+  state: EditorState,
+  tree: Tree,
+  format: InlineFormat,
+  from: number,
+  to: number,
+): TransactionSpec | null {
+  // A link per line is surprising (five words, five separate links), so a
+  // multi-line link is deliberately refused outright.
+  if (format === 'link') return null;
+
+  const spec = FORMAT_NODES[format];
+  const segments = eligibleSegments(state, tree, from, to, format);
+  if (segments.length === 0) return null;
+
+  // Per segment: the format's node fully enclosing it, or null when the
+  // segment is unformatted.
+  const enclosing = segments.map((seg) => enclosingNode(tree, spec.node, seg.from, seg.to));
+  const allFormatted = enclosing.every((node) => node !== null);
+
+  const changes: ChangeSpec[] = [];
+  if (allFormatted) {
+    // UNWRAP ALL: delete each node's own two marker ranges. A malformed
+    // span (fewer than two mark children) is skipped, never guessed at —
+    // same conservatism as the single-line unwrap.
+    for (const node of enclosing) {
+      const marks = node!.getChildren(spec.mark);
+      if (marks.length < 2) continue;
+      const open = marks[0];
+      const close = marks[marks.length - 1];
+      changes.push({ from: open.from, to: open.to });
+      changes.push({ from: close.from, to: close.to });
+    }
+  } else {
+    // WRAP the unformatted segments; leave the formatted ones untouched.
+    for (let i = 0; i < segments.length; i++) {
+      if (enclosing[i]) continue;
+      const seg = segments[i];
+      if (wrapWouldBreakMarkdown(tree, format, seg.from, seg.to)) continue;
+      const [open, close] = wrapMarkers(format, state.doc.sliceString(seg.from, seg.to));
+      changes.push({ from: seg.from, insert: open });
+      changes.push({ from: seg.to, insert: close });
+    }
+  }
+
+  // Everything got skipped (e.g. every unformatted line would break): the
+  // toggle owns no bytes, so refuse rather than emit an empty transaction.
+  if (changes.length === 0) return null;
+
+  // Map the outer selection endpoints through the combined ChangeSet so
+  // the mapped range still hugs the same content, exactly as the
+  // single-line wrap/unwrap does.
+  const changeSet = state.changes(changes);
+  return {
+    changes,
+    selection: EditorSelection.range(changeSet.mapPos(from, 1), changeSet.mapPos(to, -1)),
+  };
+}
+
+// Split [from, to] into per-line, whitespace-trimmed segments, keeping
+// only the lines inline formatting can touch. `format` selects the
+// per-format InlineCode rule: for a non-'code' format a segment enclosed
+// by an inline code span is dropped (emphasis markers there are literal
+// bytes); pass `null` for format-independent eligibility (the toolbar's
+// show/hide test), which ignores the InlineCode nuance.
+function eligibleSegments(
+  state: EditorState,
+  tree: Tree,
+  from: number,
+  to: number,
+  format: InlineFormat | null,
+): LineSegment[] {
+  const doc = state.doc;
+  const segments: LineSegment[] = [];
+  const firstLine = doc.lineAt(from).number;
+  const lastLine = doc.lineAt(to).number;
+
+  for (let n = firstLine; n <= lastLine; n++) {
+    const line = doc.line(n);
+    let segFrom = Math.max(from, line.from);
+    let segTo = Math.min(to, line.to);
+    // Trim so markers hug content — `** x **` is not emphasis; the trimmed
+    // whitespace stays in the document, outside the markers.
+    while (segFrom < segTo && isWhitespace(doc.sliceString(segFrom, segFrom + 1))) segFrom++;
+    while (segTo > segFrom && isWhitespace(doc.sliceString(segTo - 1, segTo))) segTo--;
+    // Blank or whitespace-only line: nothing to wrap.
+    if (segFrom === segTo) continue;
+
+    // Resolve the block context at the trimmed start (bias forward, the
+    // existing enclosing-detection convention) and walk ancestors.
+    let blocked = false;
+    for (let node: SyntaxNode | null = tree.resolveInner(segFrom, 1); node; node = node.parent) {
+      // Fenced/indented code, HTML, frontmatter: markers are inert bytes.
+      // The fence lines themselves live inside the FencedCode node, so
+      // they resolve as blocked here too — the whole block is skipped.
+      if (BLOCK_BLOCKERS.has(node.name)) {
+        blocked = true;
+        break;
+      }
+      // GFM table row: a table line's bytes include `|` cell separators,
+      // so inserting a marker next to a pipe can split a marker pair
+      // across a cell boundary and mangle the table. v1 skips table lines
+      // and formats the rest rather than attempting per-cell surgery.
+      if (node.name === 'Table') {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+
+    // Per-format InlineCode nuance: a non-'code' format is inert inside an
+    // inline code span. Ignored when `format` is null.
+    if (format !== null && format !== 'code' && enclosingNode(tree, 'InlineCode', segFrom, segTo)) {
+      continue;
+    }
+
+    segments.push({ from: segFrom, to: segTo });
+  }
+  return segments;
+}
+
 /**
  * The formats whose node type structurally encloses the main selection.
  * Drives the toolbar's active-button state (e.g. inside `**a *b* c**` at
  * `b` this is `{'bold','italic'}`).
+ *
+ * For a multi-line selection a format is active iff it has at least one
+ * eligible line-segment and EVERY eligible segment is already formatted —
+ * the same "would toggling turn it off?" question the wrap/unwrap decision
+ * asks. `link` is never active multi-line (a per-line link is refused).
  */
 export function getActiveFormats(state: EditorState): Set<InlineFormat> {
   const active = new Set<InlineFormat>();
@@ -106,6 +257,20 @@ export function getActiveFormats(state: EditorState): Set<InlineFormat> {
 
   const sel = state.selection.main;
   const tree = treeForSelection(state, sel.to);
+
+  if (state.doc.lineAt(sel.from).number !== state.doc.lineAt(sel.to).number) {
+    for (const format of Object.keys(FORMAT_NODES) as InlineFormat[]) {
+      if (format === 'link') continue;
+      const spec = FORMAT_NODES[format];
+      const segments = eligibleSegments(state, tree, sel.from, sel.to, format);
+      if (segments.length === 0) continue;
+      if (segments.every((seg) => enclosingNode(tree, spec.node, seg.from, seg.to))) {
+        active.add(format);
+      }
+    }
+    return active;
+  }
+
   for (const format of Object.keys(FORMAT_NODES) as InlineFormat[]) {
     if (enclosingNode(tree, FORMAT_NODES[format].node, sel.from, sel.to)) {
       active.add(format);
@@ -116,10 +281,16 @@ export function getActiveFormats(state: EditorState): Set<InlineFormat> {
 
 /**
  * True when inline formatting is structurally possible at the main
- * selection: exactly one range, the range does not span a line break,
- * and no blocked block-context ancestor (fenced code, indented code,
- * HTML block, frontmatter). Does NOT require a non-empty selection —
- * an empty cursor can still insert an empty marker pair.
+ * selection: exactly one range and, for a single-line selection, no
+ * blocked block-context ancestor (fenced code, indented code, HTML block,
+ * frontmatter). A single-line selection does NOT require non-empty content
+ * — an empty cursor can still insert an empty marker pair.
+ *
+ * A multi-line selection is allowed iff at least one line yields an
+ * eligible segment (non-empty after trim, not inside a blocked block, not
+ * a table row). The per-format InlineCode nuance is intentionally ignored
+ * here: even a line sitting in an inline code span can still toggle the
+ * `code` format, so the bar should show.
  */
 export function inlineFormattingAllowed(state: EditorState): boolean {
   // v1 refuses multi-cursor: a single transaction toggling several
@@ -127,10 +298,12 @@ export function inlineFormattingAllowed(state: EditorState): boolean {
   if (state.selection.ranges.length !== 1) return false;
 
   const sel = state.selection.main;
-  // Inline emphasis never spans a hard line break in CommonMark.
-  if (state.doc.lineAt(sel.from).number !== state.doc.lineAt(sel.to).number) return false;
-
   const tree = treeForSelection(state, sel.to);
+
+  if (state.doc.lineAt(sel.from).number !== state.doc.lineAt(sel.to).number) {
+    return eligibleSegments(state, tree, sel.from, sel.to, null).length > 0;
+  }
+
   for (let node: SyntaxNode | null = tree.resolveInner(sel.from, 1); node; node = node.parent) {
     if (BLOCK_BLOCKERS.has(node.name)) return false;
   }

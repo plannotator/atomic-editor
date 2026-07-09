@@ -27,8 +27,15 @@ changes as the public surface stabilizes.
   plus the state-level helpers `applyFormat`, `getActiveFormats`, and
   `inlineFormattingAllowed`. Unwraps delete exactly the marker bytes read
   from the syntax tree; wraps trim whitespace out of the marked range and
-  refuse anything that would produce broken markdown (multi-line ranges,
-  marker-boundary crossings, code/frontmatter contexts).
+  refuse anything that would produce broken markdown (marker-boundary
+  crossings, code/frontmatter contexts).
+- Multi-line selections toggle per line, Obsidian-style: the selection is
+  split into whitespace-trimmed per-line segments; blank lines, code/
+  frontmatter lines, and table rows are skipped; if every eligible line is
+  already formatted the toggle unwraps them all, otherwise it wraps the
+  unformatted ones — all in a single transaction (one undo step). The
+  toolbar now shows for multi-line selections; the link toggle stays
+  single-line (its button is disabled across lines).
 
 ### Changed
 
