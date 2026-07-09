@@ -16,6 +16,15 @@ changes as the public surface stabilizes.
   quote, code block, table, divider, link, image). Opt-in via the new
   `slashCommands()` extension factory; custom items and default replacement
   via `SlashCommandsConfig`.
+- **Slash menu redesigned** — per-row icons, an inset rounded pill for the
+  hover/selected state, and card elevation. Fully themeable via seven new
+  tokens: `--atomic-editor-menu-bg`, `--atomic-editor-menu-border`,
+  `--atomic-editor-menu-shadow`, `--atomic-editor-menu-radius`,
+  `--atomic-editor-menu-item-hover-bg`, `--atomic-editor-menu-fg`, and
+  `--atomic-editor-menu-fg-muted` (dark fallbacks are built in). Each default
+  command ships an icon; `SlashCommandItem.icon` sets a custom item's glyph
+  (inline SVG using `currentColor`), and items without one fall back to a
+  default glyph so the icon gutter stays aligned.
 - `selectionToolbar()` — an opt-in floating formatting bar (bubble menu)
   shown above a non-empty selection, with bold / italic / strikethrough /
   inline-code / link toggle buttons, active-state highlighting, a bundled
@@ -55,6 +64,12 @@ changes as the public surface stabilizes.
 - The selection toolbar could stay hidden after a drag that released over
   a block widget (e.g. the table) or any element that stops pointer-event
   propagation: the drag-suppression latch now clears in the capture phase.
+- Wiki-link suggestions regressed to never resolving after the language-data
+  registration change: the completion source closure was recreated on every
+  read, so CodeMirror's autocomplete treated each update as a new source and
+  dropped in-flight async results. The source is now built once, with
+  regression tests locking source identity for both wiki-links and slash
+  commands.
 
 ### Changed
 

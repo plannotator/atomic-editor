@@ -745,12 +745,13 @@
    * these are the light counterparts. Values tuned against Linear's
    * light theme: white surface, hairline border, soft layered shadow. */
   --atomic-editor-menu-bg: #ffffff;
-  --atomic-editor-menu-border: rgba(0, 0, 0, 0.09);
-  --atomic-editor-menu-shadow: 0 9px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --atomic-editor-menu-border: rgba(0, 0, 0, 0.08);
+  --atomic-editor-menu-shadow: 0 9px 24px rgba(0, 0, 0, 0.07), 0 3px 9px rgba(0, 0, 0, 0.05),
+    0 1px 1px rgba(0, 0, 0, 0.04);
   --atomic-editor-menu-radius: 10px;
   --atomic-editor-menu-item-hover-bg: rgba(0, 0, 0, 0.05);
-  --atomic-editor-menu-fg: #1f2023;
-  --atomic-editor-menu-fg-muted: #6b6b73;
+  --atomic-editor-menu-fg: #2f2f31;
+  --atomic-editor-menu-fg-muted: #6e6e76;
 }
 
 /* Frontmatter — the YAML metadata block opened by `---` on line 1.

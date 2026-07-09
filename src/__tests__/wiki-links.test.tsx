@@ -153,4 +153,19 @@ describe('wikiLinks', () => {
     expect(view.state.doc.toString()).toBe(doc);
     expect(view.state.selection.main.head).toBe('Before [[missing-target'.length);
   });
+
+  it('registers a completion source with stable identity across languageData reads', () => {
+    // CM6's autocomplete keys async query tracking on source identity;
+    // a provider minting a fresh closure per languageDataAt read makes
+    // every update look like a new source, so the (async) suggestion
+    // result is dropped and the tooltip never appears. Regression test
+    // for exactly that bug.
+    const state = EditorState.create({
+      extensions: [wikiLinks({ suggest: async () => [] })],
+    });
+    const first = state.languageDataAt<unknown>('autocomplete', 0);
+    const second = state.languageDataAt<unknown>('autocomplete', 0);
+    expect(first.length).toBe(1);
+    expect(first[0]).toBe(second[0]);
+  });
 });
