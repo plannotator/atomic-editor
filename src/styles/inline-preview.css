@@ -524,37 +524,43 @@
 .cm-atomic-table-menu {
   position: fixed;
   z-index: 1000;
-  min-width: 170px;
-  padding: 0.25rem 0;
-  background: var(--atomic-editor-bg-panel, #252525);
-  border: 1px solid var(--atomic-editor-border, #3d3d3d);
-  border-radius: var(--atomic-editor-radius, 6px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  min-width: 180px;
+  padding: 4px;
+  background: var(--atomic-editor-menu-bg, #1e1e21);
+  border: 1px solid var(--atomic-editor-menu-border, rgba(255, 255, 255, 0.09));
+  border-radius: var(--atomic-editor-menu-radius, 10px);
+  box-shadow: var(
+    --atomic-editor-menu-shadow,
+    0 9px 32px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.28)
+  );
   font-family: var(--atomic-editor-font, system-ui, sans-serif);
-  font-size: 0.82rem;
-  color: var(--atomic-editor-fg, #dcddde);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--atomic-editor-menu-fg, #e2e3e5);
 }
 
 .cm-atomic-table-menu-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 0.35rem 0.75rem;
+  padding: 7px 10px;
   background: transparent;
   border: 0;
+  border-radius: 6px;
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
 
 .cm-atomic-table-menu-item:hover {
-  background: var(--atomic-editor-bg-surface, #2d2d2d);
+  background: var(--atomic-editor-menu-item-hover-bg, rgba(255, 255, 255, 0.07));
 }
 
 .cm-atomic-table-menu-sep {
   height: 1px;
-  margin: 0.25rem 0;
-  background: var(--atomic-editor-border, #3d3d3d);
+  margin: 4px 6px;
+  background: var(--atomic-editor-menu-border, rgba(255, 255, 255, 0.09));
 }
 
 /* Find-in-document panel — single compact row of input + match
@@ -734,6 +740,17 @@
   --atomic-editor-hl-variable: #24292f;
   --atomic-editor-hl-operator: #cf222e;
   --atomic-editor-hl-invalid: #82071e;
+  /* Popup chrome (slash menu, wiki-link suggestions, selection toolbars,
+   * table context menu). Dark defaults live inline at the usage sites;
+   * these are the light counterparts. Values tuned against Linear's
+   * light theme: white surface, hairline border, soft layered shadow. */
+  --atomic-editor-menu-bg: #ffffff;
+  --atomic-editor-menu-border: rgba(0, 0, 0, 0.09);
+  --atomic-editor-menu-shadow: 0 9px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --atomic-editor-menu-radius: 10px;
+  --atomic-editor-menu-item-hover-bg: rgba(0, 0, 0, 0.05);
+  --atomic-editor-menu-fg: #1f2023;
+  --atomic-editor-menu-fg-muted: #6b6b73;
 }
 
 /* Frontmatter — the YAML metadata block opened by `---` on line 1.

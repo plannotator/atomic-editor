@@ -988,6 +988,26 @@ function openCellMenu(
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
 
+  // The menu mounts on document.body, outside the editor's DOM, so the
+  // `--atomic-editor-menu-*` chrome tokens — light-theme remaps and
+  // consumer overrides alike, both scoped to the editor element — never
+  // cascade to it. Copy the values resolved at the editor onto the menu
+  // so it themes identically to the in-editor popups.
+  const editorStyle = getComputedStyle(view.dom);
+  for (const token of [
+    '--atomic-editor-menu-bg',
+    '--atomic-editor-menu-border',
+    '--atomic-editor-menu-shadow',
+    '--atomic-editor-menu-radius',
+    '--atomic-editor-menu-item-hover-bg',
+    '--atomic-editor-menu-fg',
+    '--atomic-editor-menu-fg-muted',
+    '--atomic-editor-font',
+  ]) {
+    const value = editorStyle.getPropertyValue(token);
+    if (value) menu.style.setProperty(token, value);
+  }
+
   type MenuItem = { label: string; action: () => void } | 'separator';
   const items: MenuItem[] = [];
 
