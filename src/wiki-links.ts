@@ -210,11 +210,16 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
   // `slashCommands`) compose: two extensions passing `override` throw a
   // config merge conflict, and `override` would suppress every other
   // completion source anyway.
+  //
+  // The source MUST be built once, outside the provider: the provider
+  // runs on every languageDataAt read, and CM6's autocomplete keys its
+  // async query tracking on source identity — a fresh closure per read
+  // is treated as a brand-new source each update, so the async result
+  // is dropped before the tooltip ever activates.
+  const source = (context: CompletionContext) => completionSource(context, config);
   return [
     autocompletion({ activateOnTyping: true, icons: false }),
-    EditorState.languageData.of(() => [
-      { autocomplete: (context: CompletionContext) => completionSource(context, config) },
-    ]),
+    EditorState.languageData.of(() => [{ autocomplete: source }]),
   ];
 }
 
