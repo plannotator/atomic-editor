@@ -132,6 +132,17 @@ describe('slashCommandSource trigger conditions', () => {
     expect(result).not.toBeNull();
     expect(result?.from).toBe(3);
   });
+
+  it('registers a completion source with stable identity across languageData reads', () => {
+    // CM6's autocomplete keys async query tracking on source identity —
+    // the languageData provider must hand back the same function every
+    // read (see the matching wiki-links regression test).
+    const state = EditorState.create({ extensions: [slashCommands()] });
+    const first = state.languageDataAt<unknown>('autocomplete', 0);
+    const second = state.languageDataAt<unknown>('autocomplete', 0);
+    expect(first.length).toBe(1);
+    expect(first[0]).toBe(second[0]);
+  });
 });
 
 describe('slashCommandSource inserted bytes', () => {
@@ -327,10 +338,41 @@ describe('slashCommands DOM integration', () => {
     const view = makeView('', [markdown(), slashCommands()]);
     const tooltip = await openSlashTooltip(view);
 
+    // The label span survives the added icon span per row — `.cm-completionLabel`
+    // still resolves one label per option.
     const labels = Array.from(tooltip.querySelectorAll('li .cm-completionLabel')).map(
       (el) => el.textContent,
     );
     expect(labels).toEqual(defaultSlashCommands.map((c) => c.label));
+
+    // Every default row carries a leading glyph in the icon gutter.
+    const rows = Array.from(tooltip.querySelectorAll('li'));
+    expect(rows.length).toBe(12);
+    for (const row of rows) {
+      expect(row.querySelector('.cm-atomic-slash-icon svg')).not.toBeNull();
+    }
+  });
+
+  it('gives a custom item without an icon the default glyph and honors an explicit icon', async () => {
+    const items: SlashCommandItem[] = [
+      { label: 'Plain', snippet: 'plain ' },
+      { label: 'Fancy', snippet: 'fancy ', icon: '<svg data-test-icon xmlns="http://www.w3.org/2000/svg"></svg>' },
+    ];
+    const view = makeView('', [markdown(), slashCommands({ items })]);
+    const tooltip = await openSlashTooltip(view);
+
+    const rowFor = (label: string): Element => {
+      const el = Array.from(tooltip.querySelectorAll('li')).find(
+        (li) => li.querySelector('.cm-completionLabel')?.textContent === label,
+      );
+      if (!el) throw new Error(`no row for ${label}`);
+      return el;
+    };
+
+    // No `icon` → the default glyph renders, so the gutter stays aligned.
+    expect(rowFor('Plain').querySelector('.cm-atomic-slash-icon svg')).not.toBeNull();
+    // With `icon` → that exact markup is injected verbatim.
+    expect(rowFor('Fancy').querySelector('[data-test-icon]')).not.toBeNull();
   });
 
   it('coexists with wikiLinks suggestions without a config merge conflict', async () => {
@@ -346,6 +388,19 @@ describe('slashCommands DOM integration', () => {
 
     expect(tooltip.querySelectorAll('li').length).toBe(12);
   });
+
+  // NOTE: the intended wiki-gutter DOM test (assert wiki-link rows carry NO
+  // `.cm-atomic-slash-icon`, proving the shared addToOptions render fn opts
+  // non-slash completions out of the icon gutter) cannot be written here:
+  // async completion sources never render a tooltip under happy-dom. The
+  // wiki source resolves correctly (see the direct-invocation coverage in
+  // wiki-links.test.tsx / the config-surface tests), but CM6's autocomplete
+  // plugin leaves the query perpetually "pending" and never dispatches the
+  // active-completion effect — reproducible with even a minimal single async
+  // `override` source, so it is an environment limitation, not our wiring.
+  // The opt-out is exercised at the unit level implicitly: the render fn
+  // returns null whenever `slashCommandIcon` is absent, which only slash
+  // completions ever set.
 });
 
 // Applies the Table option through the range the source hands CM6,

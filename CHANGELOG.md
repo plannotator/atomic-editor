@@ -16,6 +16,15 @@ changes as the public surface stabilizes.
   quote, code block, table, divider, link, image). Opt-in via the new
   `slashCommands()` extension factory; custom items and default replacement
   via `SlashCommandsConfig`.
+- **Slash menu redesigned** — per-row icons, an inset rounded pill for the
+  hover/selected state, and card elevation. Fully themeable via seven new
+  tokens: `--atomic-editor-menu-bg`, `--atomic-editor-menu-border`,
+  `--atomic-editor-menu-shadow`, `--atomic-editor-menu-radius`,
+  `--atomic-editor-menu-item-hover-bg`, `--atomic-editor-menu-fg`, and
+  `--atomic-editor-menu-fg-muted` (dark fallbacks are built in). Each default
+  command ships an icon; `SlashCommandItem.icon` sets a custom item's glyph
+  (inline SVG using `currentColor`), and items without one fall back to a
+  default glyph so the icon gutter stays aligned.
 
 ### Changed
 

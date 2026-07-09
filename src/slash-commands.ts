@@ -35,6 +35,14 @@ export interface SlashCommandItem {
   apply?: (view: EditorView, completion: Completion, from: number, to: number) => void;
   /** Ranking boost (-99..99). Defaults carry descending boosts so they keep menu order; unboosted custom items sort after them, alphabetically. */
   boost?: number;
+  /**
+   * Inline SVG markup rendered as a leading 16×16 icon in the menu row
+   * (injected via innerHTML — the string is trusted exactly like the
+   * consumer's own code). Use `currentColor` strokes/fills so the icon
+   * follows the menu's muted foreground. Items without one get the
+   * package's default glyph, so the icon gutter stays aligned.
+   */
+  icon?: string;
 }
 
 /**
@@ -130,27 +138,94 @@ function insertTable(
   });
 }
 
+// Wraps inner markup in the shared 16×16 root so every default glyph
+// carries identical stroke defaults: 1.5 stroke-width, round caps/joins,
+// and `currentColor` so the icon follows the menu's muted foreground.
+// Artwork stays roughly within a 2..14 box for consistent optical
+// margins; solid shapes (list bullets, the image lens) opt into
+// fill="currentColor" stroke="none" where a filled dot reads better.
+const svg = (inner: string): string =>
+  `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+
+// Heading glyphs share one H letterform (two verticals + a crossbar in
+// the left ~60%) and differ only by a stroke-drawn subscript digit at
+// bottom-right — no <text>, so rendering never depends on a font. The
+// three digits sit in the same x 10.5..13, y 9.4..14 box for a
+// consistent look: 1 is a diagonal lead-in into a vertical stem, 2 is a
+// top arc into a diagonal-to-horizontal foot, 3 is two stacked arcs.
+const H_LETTER = 'M2.5 3.5V11.5M8 3.5V11.5M2.5 7.5H8';
+const HEADING_1_ICON = svg(`<path d="${H_LETTER}"/><path d="M10.6 10.4 12 9.4V14"/>`);
+const HEADING_2_ICON = svg(`<path d="${H_LETTER}"/><path d="M10.5 10.1A1.35 1.35 0 1 1 12.9 11L10.5 14H13.1"/>`);
+const HEADING_3_ICON = svg(`<path d="${H_LETTER}"/><path d="M10.5 9.7A1.3 1.3 0 1 1 11.9 11.5A1.35 1.35 0 1 1 10.5 13.6"/>`);
+
+// Three body lines (x 6.5→13.5) on the right; the left column carries
+// the list marker. Bulleted uses solid dots; numbered uses stroke-drawn
+// "1"-like ordinal marks (a short vertical stem with a serif base tick),
+// again deliberately NOT <text>.
+const LIST_LINES = 'M6.5 4H13.5M6.5 8H13.5M6.5 12H13.5';
+const BULLETED_LIST_ICON = svg(
+  `<path d="${LIST_LINES}"/><circle cx="3" cy="4" r="1.1" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1.1" fill="currentColor" stroke="none"/>`,
+);
+const NUMBERED_LIST_ICON = svg(
+  `<path d="${LIST_LINES}"/><path d="M3 2.6V5.4M2.2 5.4H3.8M3 6.6V9.4M2.2 9.4H3.8M3 10.6V13.4M2.2 13.4H3.8"/>`,
+);
+
+const TASK_LIST_ICON = svg(
+  '<rect x="2" y="2" width="8" height="8" rx="2"/><path d="M4.2 6 5.6 7.4 8 4.6"/><path d="M11.5 6H14M2.5 12.5H10"/>',
+);
+const QUOTE_ICON = svg('<path d="M3.25 3V13M6.5 6H13M6.5 10H13"/>');
+const CODE_BLOCK_ICON = svg('<path d="M6 4 2.5 8 6 12"/><path d="M10 4 13.5 8 10 12"/>');
+// Full-height vertical rule + a header rule, so the frame reads as a
+// grid rather than a plain card at 16px.
+const TABLE_ICON = svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 7H14M8 3V13"/>');
+// The rule plus two dimmed text-block lines above/below it, so the glyph
+// reads as a separator between passages, not a bare line.
+const DIVIDER_ICON = svg('<path d="M2 8H14"/><path d="M4 4H12M4 12H12" opacity="0.5"/>');
+// Two interlocking diagonal capsules around a short center bar — the
+// classic chain-link glyph (Lucide's `link`, scaled to the 16 box).
+const LINK_ICON = svg(
+  '<path d="M6.67 8.67A3.33 3.33 0 0 0 11.7 9.03L13.7 7.03A3.33 3.33 0 0 0 9 2.32L7.85 3.46"/><path d="M9.33 7.33A3.33 3.33 0 0 0 4.3 6.97L2.3 8.97A3.33 3.33 0 0 0 7 13.68L8.15 12.54"/>',
+);
+// A framed lens + horizon: the small filled circle is the "sun", the
+// polyline a mountain ridge, both kept inside the rounded frame.
+const IMAGE_ICON = svg(
+  '<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.75" cy="6.5" r="1.15" fill="currentColor" stroke="none"/><path d="M2.5 11.5 6.5 8 9 10 11.5 8 13.5 9.5"/>',
+);
+
+// Fallback for custom items without their own `icon`: a plus in a
+// rounded square, reading as "insert". Keeps the icon gutter aligned so
+// custom rows line up with the defaults.
+const DEFAULT_ICON = svg('<rect x="2.5" y="2.5" width="11" height="11" rx="3"/><path d="M8 5V11M5 8H11"/>');
+
 /**
  * The twelve built-in block insertions, in menu order. Boosts descend
  * from 12 so an empty query renders them exactly in this sequence;
  * custom items (which default to no boost) sort after them.
  */
 export const defaultSlashCommands: readonly SlashCommandItem[] = [
-  { label: 'Heading 1', detail: '#', snippet: '# ', boost: 12 },
-  { label: 'Heading 2', detail: '##', snippet: '## ', boost: 11 },
-  { label: 'Heading 3', detail: '###', snippet: '### ', boost: 10 },
-  { label: 'Bulleted list', detail: '-', snippet: '- ', boost: 9 },
-  { label: 'Numbered list', detail: '1.', snippet: '1. ', boost: 8 },
-  { label: 'Task list', detail: '- [ ]', snippet: '- [ ] ', boost: 7 },
-  { label: 'Quote', detail: '>', snippet: '> ', boost: 6 },
+  { label: 'Heading 1', detail: '#', snippet: '# ', boost: 12, icon: HEADING_1_ICON },
+  { label: 'Heading 2', detail: '##', snippet: '## ', boost: 11, icon: HEADING_2_ICON },
+  { label: 'Heading 3', detail: '###', snippet: '### ', boost: 10, icon: HEADING_3_ICON },
+  { label: 'Bulleted list', detail: '-', snippet: '- ', boost: 9, icon: BULLETED_LIST_ICON },
+  { label: 'Numbered list', detail: '1.', snippet: '1. ', boost: 8, icon: NUMBERED_LIST_ICON },
+  { label: 'Task list', detail: '- [ ]', snippet: '- [ ] ', boost: 7, icon: TASK_LIST_ICON },
+  { label: 'Quote', detail: '>', snippet: '> ', boost: 6, icon: QUOTE_ICON },
   // Two anonymous tab stops: the parser treats each `${}` as an
   // independent field, so Tab moves from fence language to body.
-  { label: 'Code block', detail: '```', snippet: '```${}\n${}\n```', boost: 5 },
-  { label: 'Table', detail: '2×2', apply: insertTable, boost: 4 },
-  { label: 'Divider', detail: '---', snippet: '---', boost: 3 },
-  { label: 'Link', detail: '[]()', snippet: '[${text}](${url})', boost: 2 },
-  { label: 'Image', detail: '![]()', snippet: '![${alt}](${url})', boost: 1 },
+  { label: 'Code block', detail: '```', snippet: '```${}\n${}\n```', boost: 5, icon: CODE_BLOCK_ICON },
+  { label: 'Table', detail: '2×2', apply: insertTable, boost: 4, icon: TABLE_ICON },
+  { label: 'Divider', detail: '---', snippet: '---', boost: 3, icon: DIVIDER_ICON },
+  { label: 'Link', detail: '[]()', snippet: '[${text}](${url})', boost: 2, icon: LINK_ICON },
+  { label: 'Image', detail: '![]()', snippet: '![${alt}](${url})', boost: 1, icon: IMAGE_ICON },
 ];
+
+// Carries the row's icon markup on the completion object, mirroring the
+// `suggestion` property wiki-links pins to its own completions. The
+// `addToOptions` render fn reads it back off the completion to draw the
+// leading glyph — no map lookup, no per-keystroke work.
+interface SlashCommandCompletion extends Completion {
+  slashCommandIcon: string;
+}
 
 /**
  * Builds the completion source that powers the slash menu. Registered
@@ -179,9 +254,10 @@ export function slashCommandSource(config: SlashCommandsConfig = {}): Completion
           label: item.label,
           detail: item.detail,
           boost: item.boost,
+          slashCommandIcon: item.icon ?? DEFAULT_ICON,
           apply: (view: EditorView, completion: Completion, from: number, to: number) =>
             customApply(view, completion, from - 1, to),
-        },
+        } satisfies SlashCommandCompletion,
       ];
     }
     if (item.snippet == null) return [];
@@ -191,9 +267,10 @@ export function slashCommandSource(config: SlashCommandsConfig = {}): Completion
         label: item.label,
         detail: item.detail,
         boost: item.boost,
+        slashCommandIcon: item.icon ?? DEFAULT_ICON,
         apply: (view: EditorView, completion: Completion, from: number, to: number) =>
           applySnippet(view, completion, from - 1, to),
-      },
+      } satisfies SlashCommandCompletion,
     ];
   });
 
@@ -237,13 +314,40 @@ export function slashCommands(config: SlashCommandsConfig = {}): Extension {
   // Build the source once, not per language-data lookup.
   const source = slashCommandSource(config);
   return [
-    // Only `activateOnTyping` and `icons` are passed on purpose. Other
-    // config fields (notably `override`) have no combiner in the
-    // autocomplete config facet, so a second extension passing them
-    // (wiki-links used to) throws 'Config merge conflict'.
-    // `activateOnTyping: true` is equal-valued and `icons: false` has a
-    // combiner, so both merge safely across extensions.
-    autocompletion({ activateOnTyping: true, icons: false }),
+    // Only `activateOnTyping`, `icons`, and `addToOptions` are passed on
+    // purpose. Other config fields (notably `override`) have no combiner
+    // in the autocomplete config facet, so a second extension passing
+    // them (wiki-links used to) throws 'Config merge conflict'.
+    // `activateOnTyping: true` is equal-valued, `icons: false` has a
+    // combiner, and `addToOptions` merges by array concat, so all three
+    // merge safely across the slashCommands() and wikiLinks() instances.
+    autocompletion({
+      activateOnTyping: true,
+      icons: false,
+      addToOptions: [
+        {
+          // Sit where CM's own type icons would (position 20), so our
+          // glyph occupies the same leading gutter.
+          position: 20,
+          render: (completion: Completion): HTMLElement | null => {
+            const icon = (completion as Partial<SlashCommandCompletion>).slashCommandIcon;
+            // CRITICAL: addToOptions is shared across every autocompletion()
+            // instance via the concat combiner, so this render fn also runs
+            // for wiki-link (and code-language) completions. Those have no
+            // slashCommandIcon — returning null gives their rows NO icon
+            // gutter at all, keeping each menu internally consistent (a
+            // wiki-link menu stays icon-free rather than showing a lone
+            // default glyph per row).
+            if (icon == null) return null;
+            const span = document.createElement('span');
+            span.className = 'cm-atomic-slash-icon';
+            span.setAttribute('aria-hidden', 'true');
+            span.innerHTML = icon;
+            return span;
+          },
+        },
+      ],
+    }),
     // Register through language data rather than `override` so this
     // source composes with every other completion source instead of
     // suppressing them.
@@ -252,44 +356,89 @@ export function slashCommands(config: SlashCommandsConfig = {}): Extension {
   ];
 }
 
-// Styles the shared autocomplete tooltip to match the editor chrome.
-// This intentionally targets any autocomplete tooltip in the editor
-// (wiki-link suggestions included), so the two menus look identical.
-// Only `var(--atomic-editor-*, <dark fallback>)` tokens are used; each
-// appears in the `[data-theme="light"] .atomic-cm-editor` block in
-// src/styles/inline-preview.css, so light mode works by remapping.
+// Styles the shared autocomplete tooltip to Linear-quality chrome. This
+// intentionally targets any autocomplete tooltip in the editor
+// (wiki-link suggestions included), so every menu looks identical.
+//
+// Seven menu tokens drive the look — declared here as inline
+// `var(--name, <dark fallback>)` per package convention, with the dark
+// fallbacks baked in so the editor is correct with no theme at all:
+//   --atomic-editor-menu-bg             surface fill
+//   --atomic-editor-menu-border         hairline border
+//   --atomic-editor-menu-shadow         elevation (two stacked shadows)
+//   --atomic-editor-menu-radius         outer corner radius
+//   --atomic-editor-menu-item-hover-bg  hover / selected pill fill
+//   --atomic-editor-menu-fg             row foreground
+//   --atomic-editor-menu-fg-muted       detail / icon foreground
+// The light remap for all seven ships in the consumer theme (pn-main),
+// not in this package.
 const slashCommandTooltipTheme: Extension = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete': {
-    backgroundColor: 'var(--atomic-editor-bg-surface, #2d2d2d)',
-    border: '1px solid var(--atomic-editor-border, #3d3d3d)',
-    borderRadius: '6px',
+    backgroundColor: 'var(--atomic-editor-menu-bg, #1e1e21)',
+    border: '1px solid var(--atomic-editor-menu-border, rgba(255, 255, 255, 0.09))',
+    borderRadius: 'var(--atomic-editor-menu-radius, 10px)',
+    boxShadow: 'var(--atomic-editor-menu-shadow, 0 9px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.28))',
     overflow: 'hidden',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     fontFamily: 'var(--atomic-editor-font, system-ui, -apple-system, BlinkMacSystemFont, sans-serif)',
-    fontSize: '0.875rem',
-    // The base autocomplete theme caps the list at 10em (~6 items); each
-    // option is ~25px (0.875rem type + 8px vertical padding), so 24em
-    // (336px at the list's 14px em) fits the 12 defaults with headroom —
-    // custom sets beyond ~13 items still scroll. EditorView.theme rules
-    // take precedence over base themes, so this override sticks.
-    maxHeight: '24em',
+    fontSize: '0.8125rem',
+    // This 4px inner padding is the single biggest elegance cue: it insets
+    // every row so the rounded hover/selected pill floats inside the menu
+    // and never touches its edge.
+    padding: '4px',
+    // The base autocomplete theme caps the list at 10em (~6 rows). Rows
+    // are 34px, so the 12 defaults are 408px + 8px of top/bottom padding
+    // ≈ 416px. 34em at the list's 13px em is 442px — headroom of under
+    // one row, so the defaults never scroll but longer custom sets do.
+    // EditorView.theme rules take precedence over base themes, so this
+    // override sticks.
+    maxHeight: '34em',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
-    padding: '4px 10px',
-    color: 'var(--atomic-editor-fg, #dcddde)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    height: '34px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    color: 'var(--atomic-editor-menu-fg, #e2e3e5)',
+    whiteSpace: 'nowrap',
   },
-  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-    backgroundColor: 'var(--atomic-editor-selection-bg, color-mix(in srgb, #7c3aed 28%, #1e1e1e 72%))',
-    color: 'var(--atomic-editor-fg, #dcddde)',
+  // Hover and keyboard selection share one treatment: the pill carries the
+  // state and the label never inverts color (Linear never inverts).
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected], .cm-tooltip.cm-tooltip-autocomplete > ul > li:hover': {
+    backgroundColor: 'var(--atomic-editor-menu-item-hover-bg, rgba(255, 255, 255, 0.07))',
+    color: 'var(--atomic-editor-menu-fg, #e2e3e5)',
+  },
+  '.cm-completionLabel': {
+    fontWeight: '500',
   },
   '.cm-completionDetail': {
-    color: 'var(--atomic-editor-fg-muted, #888)',
+    // Right-aligned hint column — our markdown-syntax equivalent of
+    // Linear's keyboard-shortcut column.
+    marginLeft: 'auto',
+    color: 'var(--atomic-editor-menu-fg-muted, #96969d)',
     fontStyle: 'normal',
-    marginLeft: '0.75em',
+    fontSize: '0.75rem',
   },
   '.cm-completionMatchedText': {
     textDecoration: 'none',
+    // The editor's existing violet — no new accent color is introduced.
     color: 'var(--atomic-editor-accent-bright, #a78bfa)',
+  },
+  '.cm-atomic-slash-icon': {
+    width: '16px',
+    height: '16px',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--atomic-editor-menu-fg-muted, #96969d)',
+  },
+  '.cm-atomic-slash-icon svg': {
+    display: 'block',
+    width: '16px',
+    height: '16px',
   },
 });
