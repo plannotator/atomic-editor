@@ -390,8 +390,25 @@
    * text in a task item with the caret on the empty line below
    * left the caret in place (because the "wrong" line was the same
    * as the current caret). Padding keeps the bbox honest so CM6's
-   * heightmap matches the DOM. */
-  padding: 0.5em 0;
+   * heightmap matches the DOM.
+   *
+   * The 16px left/right/bottom padding is a reserved gutter for the
+   * hover affordances, which straddle `.cm-atomic-table-inner`'s
+   * border (see below) — half of each button hangs outside `inner`.
+   * `inner` has `min-width: 100%`, so it always spans this box's full
+   * content width; with zero horizontal padding here a straddling
+   * button would immediately exceed this box's own bounds. Because
+   * this box is a scroll container (`overflow-x: auto` below forces
+   * `overflow-y: auto` too, per the CSS overflow spec — one axis
+   * non-visible makes both axes a scrollport), anything beyond its
+   * padding box becomes scrollable overflow: clipped until scrolled
+   * into view, or worse, spawning a phantom scrollbar. The gutter is
+   * static (present whether or not the table is hovered) specifically
+   * so revealing the buttons never changes this box's own size —
+   * only a permanent, always-there inset does that, never a
+   * hover-triggered one. 16px comfortably clears a 20px button's 10px
+   * overhang with a few px to spare. */
+  padding: 0.5em 16px 16px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
@@ -622,19 +639,30 @@
   background: var(--atomic-editor-menu-item-hover-bg, rgba(255, 255, 255, 0.07));
 }
 
-/* Add-column: centered on the right edge. Add-row: centered on the
- * bottom edge. Both round pills. Handle: the top-right corner, softer
- * square. All inset a hair (2px) so they stay inside the box. */
+/* Add-column: straddles the right border, vertically centered. Add-row:
+ * straddles the bottom border, horizontally centered. Both round pills,
+ * Linear-style — the border line runs through the button's middle, half
+ * inside the table, half in the reserved gutter (see the padding note
+ * on `.cm-atomic-table` above).
+ *
+ * The straddle is done by anchoring the button's edge flush with
+ * `inner`'s padding-box edge (`right: 0` / `bottom: 0`) and then
+ * shifting it outward by 50% of ITS OWN box size via `translate`.
+ * `translate(50%, ...)` on a `right`-anchored box moves it right by
+ * half of *its own* width, landing its center exactly on the anchor
+ * line — this stays correct even if the button's size changes later,
+ * unlike a hardcoded pixel offset. Handle: unchanged, tucked fully
+ * inside the top-right corner — it isn't an edge-straddling control. */
 .cm-atomic-table-add-col {
   top: 50%;
-  right: 2px;
-  transform: translateY(-50%);
+  right: 0;
+  transform: translate(50%, -50%);
   border-radius: 999px;
 }
 .cm-atomic-table-add-row {
-  bottom: 2px;
+  bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, 50%);
   border-radius: 999px;
 }
 .cm-atomic-table-handle {
