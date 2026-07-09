@@ -458,6 +458,107 @@ function setCaretCharOffset(container: HTMLElement, offset: number): void {
   selection.addRange(range);
 }
 
+// ---- selection / raw utilities for in-cell formatting ---------------
+//
+// These three exports are the surface the in-cell formatting bar
+// (`cell-formatting.ts`) drives the widget through. They deliberately
+// reuse the same helpers `commit()` uses so a bar-driven edit and a
+// keystroke flow through identical serialization — the only difference
+// is WHERE the raw comes from (a computed toggle vs. `textContent`).
+
+// Resolve a character offset over `container`'s textContent to a concrete
+// (text node, offset) pair, using the same all-text-nodes-in-order walk
+// as `setCaretCharOffset`. Factored out so `setSelectionCharRange` can
+// place both endpoints without duplicating the walker. A null node means
+// the offset ran past the end of the text — the caller places the
+// boundary at the container's end.
+function resolveCharOffset(
+  container: HTMLElement,
+  offset: number,
+): { node: Text | null; offset: number } {
+  const doc = container.ownerDocument;
+  if (!doc) return { node: null, offset: 0 };
+  const walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const len = node.data.length;
+    if (remaining <= len) return { node, offset: remaining };
+    remaining -= len;
+    node = walker.nextNode() as Text | null;
+  }
+  return { node: null, offset: 0 };
+}
+
+// The current DOM selection mapped to character offsets over
+// `source.textContent`. Both endpoints must lie inside `source` (the same
+// containment rule `getCaretCharOffset` enforces for a caret); null
+// otherwise. Offsets count every text node in document order — INCLUDING
+// the hidden `.cm-atomic-mark` delimiter spans — so they line up with the
+// raw string the cell parser sees (which is why `textContent`, not
+// `innerText`, is the reference length everywhere in this file).
+export function getSelectionCharRange(
+  source: HTMLElement,
+): { from: number; to: number } | null {
+  const selection = source.ownerDocument?.defaultView?.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!source.contains(range.startContainer) || !source.contains(range.endContainer)) {
+    return null;
+  }
+  // Same technique as `getCaretCharOffset`: measure the text from the
+  // container start up to each boundary. `setEnd` moves only the end of
+  // the cloned range, so the start stays pinned at the container start.
+  const pre = range.cloneRange();
+  pre.selectNodeContents(source);
+  pre.setEnd(range.startContainer, range.startOffset);
+  const from = pre.toString().length;
+  pre.setEnd(range.endContainer, range.endOffset);
+  const to = pre.toString().length;
+  return { from, to };
+}
+
+// Inverse of `getSelectionCharRange`: place a real DOM selection spanning
+// [from, to] character offsets over `source`. Mirrors
+// `setCaretCharOffset`'s walker for each endpoint.
+export function setSelectionCharRange(source: HTMLElement, from: number, to: number): void {
+  const doc = source.ownerDocument;
+  if (!doc) return;
+  const selection = doc.defaultView?.getSelection();
+  if (!selection) return;
+  const range = doc.createRange();
+  const start = resolveCharOffset(source, from);
+  const end = resolveCharOffset(source, to);
+  if (start.node) {
+    range.setStart(start.node, start.offset);
+  } else {
+    range.selectNodeContents(source);
+    range.collapse(false);
+  }
+  if (end.node) {
+    range.setEnd(end.node, end.offset);
+  } else {
+    range.setEnd(source, source.childNodes.length);
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+// Commit a GIVEN raw string into a cell — the same DOM → source → model
+// path `commit()` runs per keystroke, but with the raw handed in rather
+// than read from `textContent`. The in-cell formatting bar computes the
+// next raw with `toggleCellRaw` and then owns caret placement (via
+// `setSelectionCharRange`) itself, so — unlike `commit` — this neither
+// captures/restores the caret NOR re-normalizes whitespace: the caller
+// passes the exact final bytes and expects them byte-preserved.
+export function updateCellRaw(view: EditorView, cell: HTMLElement, raw: string): void {
+  cell.dataset.raw = raw;
+  const source = getCellSource(cell);
+  if (source) renderCellSourceDecorated(source);
+  refreshCellPreview(cell);
+  dispatchModelFromDom(view, cell);
+}
+
 const MARK_WRAP_CLASSES = [
   'cm-atomic-strong-wrap',
   'cm-atomic-em-wrap',

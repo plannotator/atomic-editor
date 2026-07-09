@@ -31,6 +31,18 @@ changes as the public surface stabilizes.
   unformatted ones — all in a single transaction (one undo step). The
   toolbar now shows for multi-line selections; the link toggle stays
   single-line (its button is disabled across lines).
+- In-cell formatting: selecting text inside a table cell shows the same
+  toolbar chrome (bold / italic / strikethrough — the marks cells render;
+  no code or link in cells) anchored to the DOM selection. Toggles rewrite
+  only the selected span of the cell's raw markdown and flow through the
+  widget's existing single-cell commit path, so serialization, pipe
+  escaping, and undo behavior are unchanged.
+
+### Fixed
+
+- The selection toolbar could stay hidden after a drag that released over
+  a block widget (e.g. the table) or any element that stops pointer-event
+  propagation: the drag-suppression latch now clears in the capture phase.
 
 ## [0.4.3]
 

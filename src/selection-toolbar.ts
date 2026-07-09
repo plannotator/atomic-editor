@@ -8,6 +8,7 @@ import {
   type Tooltip,
   type TooltipView,
 } from '@codemirror/view';
+import { cellFormatting } from './cell-formatting';
 import {
   getActiveFormats,
   inlineFormattingAllowed,
@@ -149,7 +150,11 @@ export function selectionToolbar(config: SelectionToolbarConfig = {}): Extension
     provide: (fieldValue) => showTooltip.from(fieldValue, (value) => value.tooltip),
   });
 
-  return [field, suppressionPlugin, keymap.of(TOOLBAR_KEYMAP), toolbarTheme];
+  // The in-cell bar covers the world the tooltip field can't see: DOM
+  // selections inside a table cell's contenteditable (which never reach
+  // CM's selection state). It shares this config's button list and
+  // filters to the cell-eligible subset itself.
+  return [field, suppressionPlugin, keymap.of(TOOLBAR_KEYMAP), toolbarTheme, cellFormatting(buttons)];
 }
 
 // The tooltip exists iff the selection is a single, non-empty range that
