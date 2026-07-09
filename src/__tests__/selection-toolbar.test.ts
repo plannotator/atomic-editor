@@ -52,6 +52,17 @@ function pointerDownEvent(): Event {
   }
 }
 
+// A bubbling pointerup, dispatched on a nested node so it traverses the
+// full capture→target→bubble path (needed to exercise the capture-phase
+// release listener against a subtree that stops the bubble trip).
+function pointerUpEvent(): Event {
+  try {
+    return new PointerEvent('pointerup', { bubbles: true });
+  } catch {
+    return new MouseEvent('pointerup', { bubbles: true });
+  }
+}
+
 describe('selectionToolbar', () => {
   it('shows a tooltip anchored to a non-empty single-line selection', () => {
     const view = makeView('hello world', EditorSelection.single(0, 5));
@@ -107,6 +118,40 @@ describe('selectionToolbar', () => {
 
     window.dispatchEvent(new Event('pointerup'));
     expect(currentTooltip(view)).not.toBeNull();
+  });
+
+  it('restores the tooltip on release even when a widget stops the release from bubbling to window', () => {
+    // Regression: the described bug. A block widget (a table cell, or the
+    // fork's frontmatter editing island) renders inside the content and
+    // legitimately stops its own pointer events from escaping. When the
+    // user releases a drag that crosses such a widget OVER that widget,
+    // the pointerup never bubbles to `window`. Suppression is a global
+    // latch cleared only by a release event, so a bubble-phase window
+    // listener would strand it — the bar would never come back and the
+    // user sees "no bubble menu". Capture phase (window→target) delivers
+    // the release before any descendant can stop it.
+    const view = makeView('hello world', EditorSelection.single(0, 5));
+    expect(currentTooltip(view)).not.toBeNull();
+
+    // Drag begins: suppression latches on, tooltip hidden.
+    view.contentDOM.dispatchEvent(pointerDownEvent());
+    expect(currentTooltip(view)).toBeNull();
+
+    // An editing-island widget: a subtree whose root swallows pointerup so
+    // it cannot bubble up to `window`.
+    const island = document.createElement('div');
+    const inner = document.createElement('div');
+    island.appendChild(inner);
+    document.body.appendChild(island);
+    island.addEventListener('pointerup', (event) => event.stopPropagation());
+
+    // Release over the island's inner node. A bubble-phase listener would
+    // miss this (the island blocks the trip to window); the capture-phase
+    // listener still fires and clears the latch.
+    inner.dispatchEvent(pointerUpEvent());
+    expect(currentTooltip(view)).not.toBeNull();
+
+    island.remove();
   });
 
   it('suppresses the tooltip during IME composition and restores it after', () => {

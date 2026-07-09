@@ -42,7 +42,9 @@ const DEFAULT_BUTTONS: readonly InlineFormat[] = ['bold', 'italic', 'strikethrou
 
 // Accessible names, mirrored into both `aria-label` and `title` so the
 // button is announced by screen readers and shows a native tooltip.
-const BUTTON_LABELS: Record<InlineFormat, string> = {
+// Exported (module-internal, not via index.ts) so the in-cell formatting
+// bar renders identical chrome without duplicating the assets.
+export const BUTTON_LABELS: Record<InlineFormat, string> = {
   bold: 'Bold',
   italic: 'Italic',
   strikethrough: 'Strikethrough',
@@ -66,7 +68,7 @@ const BUTTON_COMMANDS: Record<InlineFormat, Command> = {
 // variable rather than per-icon overrides. `aria-hidden` keeps the
 // decorative SVG out of the accessibility tree — the button's
 // `aria-label` is the accessible name.
-const BUTTON_ICONS: Record<InlineFormat, string> = {
+export const BUTTON_ICONS: Record<InlineFormat, string> = {
   bold:
     '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 3v10h4.2a2.6 2.6 0 0 0 0-5.2H5m0 0h3.4a2.4 2.4 0 0 0 0-4.8H5z"/></svg>',
   italic:
@@ -231,10 +233,27 @@ function createToolbarView(view: EditorView, buttons: readonly InlineFormat[]): 
 // win the order race against CM6's own selection handler) that only
 // engages when the press lands inside the content, plus window-level
 // pointerup/pointercancel because the release can happen outside the
-// editor after a drag. IME composition is handled through
-// compositionstart/compositionend on the content DOM — those fire
-// outside CM6's update cycle, so dispatching from them is safe (unlike
-// dispatching from a ViewPlugin `update`).
+// editor after a drag.
+//
+// The window release listeners are CAPTURE phase, not bubble. Suppression
+// is a global latch: once a drag sets it, ONLY a release event clears it,
+// so that release must reach us no matter where the pointer is let go.
+// A bubble-phase window listener is the LAST thing an event reaches, so
+// any ancestor between the release target and `window` that stops
+// propagation permanently strands the latch — the toolbar then never
+// returns after the drag. Block widgets do exactly this: they are
+// self-contained editing islands whose DOM legitimately stops pointer
+// events from escaping (the table cell already does so for
+// pointerdown/click, and the fork's frontmatter widget is another such
+// island), and host apps commonly wrap the editor in drag/modal layers
+// that swallow pointerup. Capture phase runs window→target BEFORE any
+// descendant handler, so it fires regardless of who stops bubbling —
+// the latch always clears on release. This is generic: nothing here
+// knows about tables or any specific widget.
+//
+// IME composition is handled through compositionstart/compositionend on
+// the content DOM — those fire outside CM6's update cycle, so dispatching
+// from them is safe (unlike dispatching from a ViewPlugin `update`).
 const suppressionPlugin = ViewPlugin.fromClass(
   class {
     private dragging = false;
@@ -269,16 +288,19 @@ const suppressionPlugin = ViewPlugin.fromClass(
       view.dom.addEventListener('pointerdown', this.onDown, true);
       view.contentDOM.addEventListener('compositionstart', this.onCompositionStart);
       view.contentDOM.addEventListener('compositionend', this.onCompositionEnd);
-      window.addEventListener('pointerup', this.onUp);
-      window.addEventListener('pointercancel', this.onUp);
+      // Capture phase (see the block comment above): the release must
+      // clear the latch even when a widget or host wrapper stops the
+      // event's propagation before it would bubble to `window`.
+      window.addEventListener('pointerup', this.onUp, true);
+      window.addEventListener('pointercancel', this.onUp, true);
     }
 
     destroy(): void {
       this.view.dom.removeEventListener('pointerdown', this.onDown, true);
       this.view.contentDOM.removeEventListener('compositionstart', this.onCompositionStart);
       this.view.contentDOM.removeEventListener('compositionend', this.onCompositionEnd);
-      window.removeEventListener('pointerup', this.onUp);
-      window.removeEventListener('pointercancel', this.onUp);
+      window.removeEventListener('pointerup', this.onUp, true);
+      window.removeEventListener('pointercancel', this.onUp, true);
     }
 
     // Suppress while either a drag or an IME session is active. Dispatch
