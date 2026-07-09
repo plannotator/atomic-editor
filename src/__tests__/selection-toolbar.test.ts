@@ -67,8 +67,17 @@ describe('selectionToolbar', () => {
     expect(currentTooltip(view)).toBeNull();
   });
 
-  it('shows nothing for a selection spanning a line break', () => {
+  it('shows a tooltip for a selection spanning a line break', () => {
+    // Multi-line selections now format per line, so the bar appears.
     const view = makeView('line one\nline two', EditorSelection.single(0, 12));
+    expect(currentTooltip(view)).not.toBeNull();
+  });
+
+  it('shows nothing for a multi-line selection entirely inside a fence', () => {
+    const doc = '```\naaa\nbbb\n```';
+    const from = doc.indexOf('aaa');
+    const to = doc.indexOf('bbb') + 3;
+    const view = makeView(doc, EditorSelection.single(from, to));
     expect(currentTooltip(view)).toBeNull();
   });
 
@@ -137,6 +146,26 @@ describe('selectionToolbar', () => {
     expect(boldButton?.classList.contains('cm-atomic-selection-toolbar-active')).toBe(true);
     const italicButton = dom.querySelector('button[aria-label="Italic"]');
     expect(italicButton?.classList.contains('cm-atomic-selection-toolbar-active')).toBe(false);
+  });
+
+  it('disables the link button for a multi-line selection but not a single-line one', () => {
+    const multi = makeView('line one\nline two', EditorSelection.single(0, 12));
+    const multiDom = currentTooltip(multi)!.create(multi).dom;
+    const multiLink = multiDom.querySelector<HTMLButtonElement>('button[aria-label="Link"]');
+    expect(multiLink?.disabled).toBe(true);
+
+    const single = makeView('hello world', EditorSelection.single(0, 5));
+    const singleDom = currentTooltip(single)!.create(single).dom;
+    const singleLink = singleDom.querySelector<HTMLButtonElement>('button[aria-label="Link"]');
+    expect(singleLink?.disabled).toBe(false);
+  });
+
+  it('marks bold active when every line of a multi-line selection is bold', () => {
+    const doc = '**one**\n**two**';
+    const view = makeView(doc, EditorSelection.single(0, doc.length));
+    const dom = currentTooltip(view)!.create(view).dom;
+    const boldButton = dom.querySelector('button[aria-label="Bold"]');
+    expect(boldButton?.classList.contains('cm-atomic-selection-toolbar-active')).toBe(true);
   });
 
   it('leaves the document byte-identical when untouched', () => {

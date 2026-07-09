@@ -1,3 +1,4 @@
+import { history, undo } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
@@ -153,12 +154,6 @@ describe('applyFormat — structural refusals leave the document untouched', () 
     expect(state.doc.toString()).toBe('**bold** text');
   });
 
-  it('refuses a multi-line selection', () => {
-    const state = makeState('a\nb', 0, 3);
-    expect(applyFormat(state, 'bold')).toBeNull();
-    expect(state.doc.toString()).toBe('a\nb');
-  });
-
   it('refuses inside a fenced code block', () => {
     expect(applyFormat(makeState('```\ncode\n```', 5, 8), 'bold')).toBeNull();
   });
@@ -257,6 +252,92 @@ describe('applyFormat — wrap/unwrap round-trip identity', () => {
   });
 });
 
+describe('applyFormat — multi-line per-line formatting', () => {
+  it('wraps every line of a 3-line selection and maps the outer selection', () => {
+    expect(apply('one\ntwo\nthree', 0, 13, 'bold')).toEqual({
+      text: '**one**\n**two**\n**three**',
+      from: 2,
+      to: 23,
+    });
+  });
+
+  it('unwraps every line when all three are already bold', () => {
+    expect(apply('**one**\n**two**\n**three**', 0, 25, 'bold')?.text).toBe('one\ntwo\nthree');
+  });
+
+  it('wraps only the unformatted lines, leaving a formatted line byte-untouched', () => {
+    expect(apply('**one**\ntwo\nthree', 0, 17, 'bold')).toEqual({
+      text: '**one**\n**two**\n**three**',
+      from: 0,
+      to: 23,
+    });
+  });
+
+  it('skips a blank line in the middle', () => {
+    expect(apply('one\n\ntwo', 0, 8, 'bold')?.text).toBe('**one**\n\n**two**');
+  });
+
+  it('skips lines inside a fenced code block, formatting the rest', () => {
+    const doc = 'a\n```\ncode\n```\nb';
+    expect(apply(doc, 0, doc.length, 'bold')?.text).toBe('**a**\n```\ncode\n```\n**b**');
+  });
+
+  it('formats mid-word endpoints on the first and last line', () => {
+    // Spec case 6: mid-word on both ends. `world`'s `r` sits at index 8,
+    // so selecting through index 9 (assoc-exclusive) takes `wor`.
+    expect(apply('hello\nworld', 3, 9, 'bold')?.text).toBe('hel**lo**\n**wor**ld');
+  });
+
+  it('trims each segment independently, preserving whitespace outside the markers', () => {
+    expect(apply('  one \n two', 0, 11, 'bold')?.text).toBe('  **one** \n **two**');
+  });
+
+  it('skips GFM table rows and formats a following plain line', () => {
+    // A blank line separates the table from the paragraph: the GFM parser
+    // otherwise absorbs a pipe-less trailing line into the table as a row.
+    const doc = '| a |\n| - |\n| c |\n\nplain';
+    expect(apply(doc, 0, doc.length, 'bold')?.text).toBe('| a |\n| - |\n| c |\n\n**plain**');
+  });
+
+  it('returns null when every line is ineligible (all inside a fence)', () => {
+    const doc = '```\naaa\nbbb\n```';
+    const from = doc.indexOf('aaa');
+    const to = doc.indexOf('bbb') + 3;
+    expect(applyFormat(makeState(doc, from, to), 'bold')).toBeNull();
+  });
+
+  it('refuses a multi-line link outright', () => {
+    expect(applyFormat(makeState('one\ntwo', 0, 7), 'link')).toBeNull();
+  });
+
+  it('skips a segment whose wrap would break a marker pair, wrapping the rest', () => {
+    // Selecting from inside `**b**` (index 4) through the plain second
+    // line: segment 1 crosses the StrongEmphasis boundary → skipped;
+    // `plain` wraps cleanly.
+    expect(apply('a **b** c\nplain', 4, 15, 'bold')?.text).toBe('a **b** c\n**plain**');
+  });
+
+  it('applies a multi-line wrap as a single undo step', () => {
+    const original = 'one\ntwo\nthree';
+    let state = makeState(original, 0, original.length, [history()]);
+    state = state.update(applyFormat(state, 'bold')!).state;
+    expect(state.doc.toString()).toBe('**one**\n**two**\n**three**');
+
+    let undone = state;
+    undo({
+      state,
+      dispatch: (tr) => {
+        undone = tr.state;
+      },
+    });
+    expect(undone.doc.toString()).toBe(original);
+  });
+
+  it('round-trips to the original bytes when the same toggle is applied twice', () => {
+    expect(roundTrip('one\ntwo\nthree', 0, 13, 'bold')).toBe('one\ntwo\nthree');
+  });
+});
+
 describe('getActiveFormats', () => {
   it('reports bold inside a bold span', () => {
     expect([...getActiveFormats(makeState('**bold**', 3, 3))]).toEqual(['bold']);
@@ -269,6 +350,21 @@ describe('getActiveFormats', () => {
   it('reports nothing in plain text', () => {
     expect(getActiveFormats(makeState('hello', 1, 3)).size).toBe(0);
   });
+
+  it('reports bold for a multi-line selection where every line is bold', () => {
+    const doc = '**one**\n**two**\n**three**';
+    expect([...getActiveFormats(makeState(doc, 0, doc.length))]).toEqual(['bold']);
+  });
+
+  it('reports no bold for a multi-line selection with a plain line', () => {
+    const doc = '**one**\ntwo\nthree';
+    expect(getActiveFormats(makeState(doc, 0, doc.length)).has('bold')).toBe(false);
+  });
+
+  it('never reports link for a multi-line selection', () => {
+    const doc = '[a](b)\n[c](d)';
+    expect(getActiveFormats(makeState(doc, 0, doc.length)).has('link')).toBe(false);
+  });
 });
 
 describe('inlineFormattingAllowed', () => {
@@ -276,8 +372,17 @@ describe('inlineFormattingAllowed', () => {
     expect(inlineFormattingAllowed(makeState('```\ncode\n```', 5, 8))).toBe(false);
   });
 
-  it('is false for a multi-line selection', () => {
-    expect(inlineFormattingAllowed(makeState('a\nb', 0, 3))).toBe(false);
+  it('is true for a multi-line selection with an eligible line', () => {
+    expect(inlineFormattingAllowed(makeState('a\nb', 0, 3))).toBe(true);
+  });
+
+  it('is false for a multi-line selection entirely inside fenced code', () => {
+    // `aaa` and `bbb` both live inside the fence, so no line yields an
+    // eligible segment and the bar must not show.
+    const doc = '```\naaa\nbbb\n```';
+    const from = doc.indexOf('aaa');
+    const to = doc.indexOf('bbb') + 3;
+    expect(inlineFormattingAllowed(makeState(doc, from, to))).toBe(false);
   });
 
   it('is false for a multi-cursor selection', () => {

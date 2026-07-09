@@ -152,9 +152,11 @@ export function selectionToolbar(config: SelectionToolbarConfig = {}): Extension
 
 // The tooltip exists iff the selection is a single, non-empty range that
 // permits inline formatting AND we are not suppressed.
-// `inlineFormattingAllowed` already enforces single-range / single-line /
-// not-in-code-or-frontmatter; the extra `!empty` guard keeps the bar off
-// a bare cursor, and the explicit range-count check matches the spec.
+// `inlineFormattingAllowed` already enforces single-range and that at
+// least one line can be formatted — a multi-line selection now shows the
+// bar (its lines are toggled individually), so nothing here filters on
+// line count. The extra `!empty` guard keeps the bar off a bare cursor,
+// and the explicit range-count check matches the spec.
 function buildTooltip(
   state: EditorState,
   suppressed: boolean,
@@ -201,19 +203,25 @@ function createToolbarView(view: EditorView, buttons: readonly InlineFormat[]): 
     return { format, button };
   });
 
-  const syncActive = (state: EditorState): void => {
+  const sync = (state: EditorState): void => {
     const active = getActiveFormats(state);
+    const main = state.selection.main;
+    // A multi-line link is refused (a link per line surprises the user),
+    // so disable — not hide — the link button for a multi-line selection:
+    // hiding would reflow the bar's width as the selection grows a line.
+    const multiline = state.doc.lineAt(main.from).number !== state.doc.lineAt(main.to).number;
     for (const entry of entries) {
       entry.button.classList.toggle('cm-atomic-selection-toolbar-active', active.has(entry.format));
+      entry.button.disabled = entry.format === 'link' && multiline;
     }
   };
 
-  syncActive(view.state);
+  sync(view.state);
 
   return {
     dom,
     update(update) {
-      syncActive(update.state);
+      sync(update.state);
     },
   };
 }
@@ -309,9 +317,15 @@ const toolbarTheme = EditorView.baseTheme({
     cursor: 'pointer',
     color: 'var(--atomic-editor-fg-muted, #888)',
   },
-  '.cm-atomic-selection-toolbar-button:hover': {
+  // `:not(:disabled)` so a disabled button (e.g. link on a multi-line
+  // selection) shows no hover affordance.
+  '.cm-atomic-selection-toolbar-button:hover:not(:disabled)': {
     backgroundColor: 'var(--atomic-editor-bg, #1e1e1e)',
     color: 'var(--atomic-editor-fg, #dcddde)',
+  },
+  '.cm-atomic-selection-toolbar-button:disabled': {
+    opacity: '0.4',
+    cursor: 'default',
   },
   '.cm-atomic-selection-toolbar-button.cm-atomic-selection-toolbar-active': {
     color: 'var(--atomic-editor-accent-bright, #a78bfa)',
