@@ -64,6 +64,13 @@ changes as the public surface stabilizes.
 - The selection toolbar could stay hidden after a drag that released over
   a block widget (e.g. the table) or any element that stops pointer-event
   propagation: the drag-suppression latch now clears in the capture phase.
+- Tooltips no longer escape the editor: the toolbar bundles a
+  `tooltips({ tooltipSpace })` config clamping tooltip space to the
+  editor's rect (intersected with the window), so a first-line selection
+  flips the bar below instead of rendering over host chrome. This applies
+  to every tooltip in the editor (autocomplete included) by design; a
+  consumer's own `tooltipSpace` registered at higher precedence still
+  wins. The in-cell bar flips below the selection near the top edge too.
 - Wiki-link suggestions regressed to never resolving after the language-data
   registration change: the completion source closure was recreated on every
   read, so CodeMirror's autocomplete treated each update as a new source and

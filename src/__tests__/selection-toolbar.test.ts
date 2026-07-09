@@ -2,7 +2,11 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorSelection, EditorState, type EditorStateConfig, type Extension } from '@codemirror/state';
 import { EditorView, runScopeHandlers, showTooltip, type Tooltip } from '@codemirror/view';
-import { selectionToolbar, type SelectionToolbarConfig } from '../selection-toolbar';
+import {
+  editorTooltipSpace,
+  selectionToolbar,
+  type SelectionToolbarConfig,
+} from '../selection-toolbar';
 
 const views: EditorView[] = [];
 
@@ -255,5 +259,24 @@ describe('selectionToolbar', () => {
       runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'b', metaKey: true }), 'editor');
     expect(handled).toBe(true);
     expect(view.state.doc.toString()).toBe('**hello** world');
+  });
+});
+
+describe('editorTooltipSpace', () => {
+  it('returns the editor rect when it sits fully inside the window', () => {
+    const editor = { top: 43, left: 10, right: 900, bottom: 700 };
+    expect(editorTooltipSpace(editor, 1280, 800)).toEqual(editor);
+  });
+
+  it('clamps an editor rect that pokes past the window edges', () => {
+    // Editor scrolled partially off the top-left, wider/taller than the
+    // window: every edge clamps to the viewport.
+    const editor = { top: -120, left: -30, right: 1400, bottom: 950 };
+    expect(editorTooltipSpace(editor, 1280, 800)).toEqual({
+      top: 0,
+      left: 0,
+      right: 1280,
+      bottom: 800,
+    });
   });
 });
