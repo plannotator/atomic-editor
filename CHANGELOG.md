@@ -18,6 +18,12 @@ changes as the public surface stabilizes.
 
 ### Added
 
+- **`preferResolvedLabel` on `WikiLinksConfig`.** With the flag on, labeled
+  wiki links (`[[target|label]]`) resolve to and display the document's
+  current title, falling back to the stored label while loading or when the
+  target is missing — so renames propagate to every rendered link without
+  rewriting document bytes. Purely a display preference; the source is never
+  touched. Defaults to false (existing behavior unchanged).
 - Table hover affordances for discoverability: a `+` on the right edge
   (append column), a `+` on the bottom edge (append row), and a `⋯`
   handle (top-right) that opens the existing table menu — all revealed on
