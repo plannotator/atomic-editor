@@ -397,26 +397,78 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.cm-atomic-table table {
-  border-collapse: collapse;
+/* Positioning context + rounded container for the table and its hover
+ * affordances. Hugs the table (`max-content`) but fills the reading
+ * column when narrow (`min-width: 100%`). Deliberately NOT
+ * `overflow: hidden` — that would clip the edge affordances — so the
+ * rounded corners are achieved by rounding the corner CELLS below
+ * rather than by clipping the box. */
+.cm-atomic-table-inner {
+  position: relative;
   width: max-content;
   min-width: 100%;
+  border: 1px solid var(--atomic-editor-border, #3d3d3d);
+  border-radius: 8px;
+}
+
+.cm-atomic-table table {
+  /* `separate` (not `collapse`) so the container's border-radius isn't
+   * fought by collapsed cell borders, and so per-cell hairlines can be
+   * dropped on the outer edges. `border-spacing: 0` keeps cells flush. */
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
   font-family: var(--atomic-editor-font, system-ui, sans-serif);
 }
 
+/* Interior hairlines only — the container `.cm-atomic-table-inner`
+ * border draws the outer frame, so cells carry just their right and
+ * bottom dividers and the last column / last row drop theirs (below). */
 .cm-atomic-table th,
 .cm-atomic-table td {
-  border: 1px solid var(--atomic-editor-border, #3d3d3d);
-  padding: 0.35em 0.6em;
+  border-right: 1px solid var(--atomic-editor-border, #3d3d3d);
+  border-bottom: 1px solid var(--atomic-editor-border, #3d3d3d);
+  padding: 10px 14px;
   text-align: left;
   vertical-align: top;
   min-width: 2em;
   min-height: 1.5em;
 }
 
+.cm-atomic-table th:last-child,
+.cm-atomic-table td:last-child {
+  border-right: none;
+}
+
+.cm-atomic-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Round the four corner cells to sit inside the container's 8px radius
+ * (minus the 1px border → 7px). With no body rows the header cells keep
+ * their top rounding and read square at the bottom — acceptable. */
+.cm-atomic-table thead th:first-child {
+  border-top-left-radius: 7px;
+}
+.cm-atomic-table thead th:last-child {
+  border-top-right-radius: 7px;
+}
+.cm-atomic-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 7px;
+}
+.cm-atomic-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 7px;
+}
+
 .cm-atomic-table th {
-  font-weight: 700;
-  background: var(--atomic-editor-code-bg, color-mix(in srgb, #2d2d2d 88%, black 12%));
+  font-weight: 600;
+  background: var(--atomic-editor-bg-panel, #252525);
+}
+
+/* Subtle row hover — a barely-there wash so the pointed-at row reads
+ * without competing with the focus outline. */
+.cm-atomic-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--atomic-editor-fg, #dcddde) 3%, transparent);
 }
 
 /* Cells aren't contenteditable themselves; the inner source element
@@ -516,6 +568,74 @@
   max-height: 5em;
   border-radius: 0.2em;
   cursor: pointer;
+}
+
+/* Hover affordances — the add-column / add-row / options controls
+ * overlaid on the table's edges (built in `makeTableAffordances`). They
+ * share the menu chrome tokens (dark inline fallbacks for standalone
+ * use; the real tokens ship on the product branch). Default-hidden and
+ * inert so a hidden control never steals a click meant for an edge
+ * cell; revealed only on hover / focus-within. */
+.cm-atomic-table-add-col,
+.cm-atomic-table-add-row,
+.cm-atomic-table-handle {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: var(--atomic-editor-menu-bg, #1e1e21);
+  border: 1px solid var(--atomic-editor-menu-border, rgba(255, 255, 255, 0.09));
+  box-shadow: var(--atomic-editor-menu-shadow, 0 9px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.28));
+  color: var(--atomic-editor-menu-fg-muted, #96969d);
+  font-family: var(--atomic-editor-font, system-ui, sans-serif);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.cm-atomic-table:hover .cm-atomic-table-add-col,
+.cm-atomic-table:hover .cm-atomic-table-add-row,
+.cm-atomic-table:hover .cm-atomic-table-handle,
+.cm-atomic-table:focus-within .cm-atomic-table-add-col,
+.cm-atomic-table:focus-within .cm-atomic-table-add-row,
+.cm-atomic-table:focus-within .cm-atomic-table-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cm-atomic-table-add-col:hover,
+.cm-atomic-table-add-row:hover,
+.cm-atomic-table-handle:hover {
+  color: var(--atomic-editor-menu-fg, #e2e3e5);
+  background: var(--atomic-editor-menu-item-hover-bg, rgba(255, 255, 255, 0.07));
+}
+
+/* Add-column: centered on the right edge. Add-row: centered on the
+ * bottom edge. Both round pills. Handle: the top-right corner, softer
+ * square. All inset a hair (2px) so they stay inside the box. */
+.cm-atomic-table-add-col {
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+}
+.cm-atomic-table-add-row {
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+}
+.cm-atomic-table-handle {
+  top: 2px;
+  right: 2px;
+  border-radius: 6px;
 }
 
 /* Table context menu — right-click a cell to insert / delete rows

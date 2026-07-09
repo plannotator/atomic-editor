@@ -741,8 +741,19 @@ class TableWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'cm-atomic-table';
 
+    // Positioning context for the hover affordances. The controls anchor
+    // to this inner box (which hugs the table via `width: max-content`),
+    // NOT the wrap — so they sit on the table's own edges even after a
+    // horizontal scroll, and stay strictly inside the box so they never
+    // extend the wrap's scrollable overflow or its measured height (a
+    // taller/wider wrap desyncs CM6's heightmap and misroutes clicks
+    // below the table — see the heightmap note in inline-preview.css).
+    const inner = document.createElement('div');
+    inner.className = 'cm-atomic-table-inner';
+    wrap.appendChild(inner);
+
     const table = document.createElement('table');
-    wrap.appendChild(table);
+    inner.appendChild(table);
 
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
@@ -763,6 +774,12 @@ class TableWidget extends WidgetType {
     }
     table.appendChild(tbody);
 
+    // Hover controls overlay the table's edges; append them last so
+    // they paint above the cells.
+    for (const control of makeTableAffordances(view, wrap)) {
+      inner.appendChild(control);
+    }
+
     return wrap;
   }
 
@@ -772,6 +789,66 @@ class TableWidget extends WidgetType {
   ignoreEvent(): boolean {
     return true;
   }
+}
+
+// ---- hover affordances ----------------------------------------------
+
+// Three quiet, absolutely-positioned controls overlaid on the table's
+// edges: add-column (right), add-row (bottom), and a table-options
+// handle (top-right). They live inside `.cm-atomic-table-inner` and are
+// default-hidden via CSS, revealing on `:hover` / `:focus-within`. Every
+// action flows through the same DOM → model → dispatch path as the
+// context menu, so rendering/hovering never touches the document.
+function makeTableAffordances(view: EditorView, wrap: HTMLElement): HTMLElement[] {
+  const addCol = makeAffordanceButton('cm-atomic-table-add-col', 'Add column', '+');
+  addCol.addEventListener('click', (event) => {
+    event.stopPropagation();
+    appendColumn(view, wrap);
+  });
+
+  const addRow = makeAffordanceButton('cm-atomic-table-add-row', 'Add row', '+');
+  addRow.addEventListener('click', (event) => {
+    event.stopPropagation();
+    appendRow(view, wrap);
+  });
+
+  const handle = makeAffordanceButton('cm-atomic-table-handle', 'Table options', '⋯');
+  handle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    // Open the shared menu for the first body cell (row 0, col 0) so
+    // "Insert row above" reads as "insert at the top" — the sensible
+    // table-level default. Fall back to the first header cell when the
+    // table has no body rows. Anchor at the handle's bottom-left corner.
+    const anchorCell =
+      wrap.querySelector<HTMLElement>('tbody td') ??
+      wrap.querySelector<HTMLElement>('thead th');
+    if (!anchorCell) return;
+    const rect = handle.getBoundingClientRect();
+    openTableMenuForCell(view, anchorCell, rect.left, rect.bottom);
+  });
+
+  return [addCol, addRow, handle];
+}
+
+function makeAffordanceButton(
+  className: string,
+  label: string,
+  glyph: string,
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className;
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  btn.textContent = glyph;
+  // Suppress the focus-move / caret placement a press would otherwise
+  // trigger — the button sits over cells that have their own pointerdown
+  // handlers. The action runs on the following `click`.
+  btn.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  return btn;
 }
 
 function makeCell(
@@ -971,7 +1048,20 @@ function dispatchModel(
   });
 }
 
+// Right-clicking a cell opens the menu at the pointer, anchored to that
+// cell's context (isHeader / row / col). Kept as a thin, stable-shaped
+// entry point; the table-options handle reaches the same builder via
+// `openTableMenuForCell` with a synthetic anchor cell.
 function openCellMenu(
+  view: EditorView,
+  cell: HTMLElement,
+  x: number,
+  y: number,
+): void {
+  openTableMenuForCell(view, cell, x, y);
+}
+
+function openTableMenuForCell(
   view: EditorView,
   cell: HTMLElement,
   x: number,
@@ -1214,6 +1304,22 @@ function appendRow(view: EditorView, wrap: HTMLElement): void {
       firstSource.focus();
       placeCaretAtEnd(firstSource);
     });
+  });
+}
+
+// Append an empty trailing column. Byte-identical to the context menu's
+// "Insert column right" invoked on the last column: push '' to the
+// header and every body row, then dispatch through the same range
+// replace. No new serialization logic — same shape as `dispatchModel`.
+function appendColumn(view: EditorView, wrap: HTMLElement): void {
+  const range = findCurrentTableRange(view, wrap);
+  if (!range) return;
+  const model = readModelFromDom(wrap);
+  model.header.push('');
+  for (const row of model.rows) row.push('');
+  const next = serializeTable(model);
+  view.dispatch({
+    changes: { from: range.from, to: range.to, insert: next },
   });
 }
 
