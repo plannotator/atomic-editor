@@ -37,6 +37,13 @@ changes as the public surface stabilizes.
   only the selected span of the cell's raw markdown and flow through the
   widget's existing single-cell commit path, so serialization, pipe
   escaping, and undo behavior are unchanged.
+- Toolbar chrome tokens: both bars share a Linear-style look themed via
+  `--atomic-editor-menu-bg`, `--atomic-editor-menu-border`,
+  `--atomic-editor-menu-shadow`, `--atomic-editor-menu-radius`,
+  `--atomic-editor-menu-item-hover-bg`, `--atomic-editor-menu-fg`, and
+  `--atomic-editor-menu-fg-muted` (dark fallbacks inline; light values are
+  the consuming theme's job). The active-format wash reuses
+  `--atomic-editor-accent-soft` / the accent family — no bespoke token.
 
 ### Fixed
 

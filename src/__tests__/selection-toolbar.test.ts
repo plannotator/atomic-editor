@@ -183,6 +183,33 @@ describe('selectionToolbar', () => {
     expect(labels).toEqual(['Bold', 'Link']);
   });
 
+  it('renders exactly one separator, between the code and link buttons, by default', () => {
+    const view = makeView('hello world', EditorSelection.single(0, 5));
+    const dom = currentTooltip(view)!.create(view).dom;
+    const separators = dom.querySelectorAll('.cm-atomic-selection-toolbar-separator');
+    expect(separators).toHaveLength(1);
+    // The divider sits at the text-style → link boundary: code before it,
+    // link after it.
+    const separator = separators[0];
+    expect(separator.getAttribute('aria-hidden')).toBe('true');
+    expect(separator.previousElementSibling?.getAttribute('aria-label')).toBe('Inline code');
+    expect(separator.nextElementSibling?.getAttribute('aria-label')).toBe('Link');
+  });
+
+  it('renders no separator when the config has no link button', () => {
+    const view = makeView('hello world', EditorSelection.single(0, 5), {
+      buttons: ['bold', 'italic'],
+    });
+    const dom = currentTooltip(view)!.create(view).dom;
+    expect(dom.querySelectorAll('.cm-atomic-selection-toolbar-separator')).toHaveLength(0);
+  });
+
+  it('renders no separator when the config has no text-style button', () => {
+    const view = makeView('hello world', EditorSelection.single(0, 5), { buttons: ['link'] });
+    const dom = currentTooltip(view)!.create(view).dom;
+    expect(dom.querySelectorAll('.cm-atomic-selection-toolbar-separator')).toHaveLength(0);
+  });
+
   it('marks the active format on the matching button', () => {
     const doc = '**bold** text';
     const view = makeView(doc, EditorSelection.single(2, 6));

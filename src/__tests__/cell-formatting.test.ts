@@ -290,6 +290,9 @@ describe('cellFormatting bar (DOM)', () => {
     expect(bar).toBeTruthy();
     // code + link filtered out → only bold/italic/strikethrough.
     expect(bar!.querySelectorAll('button')).toHaveLength(3);
+    // No link button reaches the cell bar, so the shared builder emits no
+    // group separator here.
+    expect(bar!.querySelectorAll('.cm-atomic-selection-toolbar-separator')).toHaveLength(0);
   });
 
   it('toggling bold updates the cell raw AND the document, leaving other bytes intact', () => {

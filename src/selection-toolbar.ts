@@ -9,6 +9,7 @@ import {
   type TooltipView,
 } from '@codemirror/view';
 import { cellFormatting } from './cell-formatting';
+import { buildToolbarButtons, toolbarChromeTheme } from './toolbar-chrome';
 import {
   getActiveFormats,
   inlineFormattingAllowed,
@@ -41,45 +42,18 @@ export interface SelectionToolbarConfig {
 
 const DEFAULT_BUTTONS: readonly InlineFormat[] = ['bold', 'italic', 'strikethrough', 'code', 'link'];
 
-// Accessible names, mirrored into both `aria-label` and `title` so the
-// button is announced by screen readers and shows a native tooltip.
-// Exported (module-internal, not via index.ts) so the in-cell formatting
-// bar renders identical chrome without duplicating the assets.
-export const BUTTON_LABELS: Record<InlineFormat, string> = {
-  bold: 'Bold',
-  italic: 'Italic',
-  strikethrough: 'Strikethrough',
-  code: 'Inline code',
-  link: 'Link',
-};
-
 // The toggle command run when a button is clicked. Each is a no-op when
 // the current selection refuses the format, so wiring them directly is
-// safe even though the bar only renders when formatting is allowed.
+// safe even though the bar only renders when formatting is allowed. This
+// stays here (not in the shared chrome) because it is the main bar's own
+// click behaviour — the in-cell bar rewrites the cell's raw string
+// instead.
 const BUTTON_COMMANDS: Record<InlineFormat, Command> = {
   bold: toggleBold,
   italic: toggleItalic,
   strikethrough: toggleStrikethrough,
   code: toggleInlineCode,
   link: toggleLink,
-};
-
-// Hand-authored 16x16 glyphs. `currentColor` lets the button's `color`
-// (idle / hover / active) drive the icon, so theming is a single CSS
-// variable rather than per-icon overrides. `aria-hidden` keeps the
-// decorative SVG out of the accessibility tree — the button's
-// `aria-label` is the accessible name.
-export const BUTTON_ICONS: Record<InlineFormat, string> = {
-  bold:
-    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 3v10h4.2a2.6 2.6 0 0 0 0-5.2H5m0 0h3.4a2.4 2.4 0 0 0 0-4.8H5z"/></svg>',
-  italic:
-    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 3H6.5M9.5 13H6M9.5 3l-3 10"/></svg>',
-  strikethrough:
-    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 4.5A3 2.2 0 0 0 8 3H7a2 2 0 0 0-.6 3.9M5 11a3 2.2 0 0 0 3 1.5h1a2 2 0 0 0 .6-3.9M3 8h10"/></svg>',
-  code:
-    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5 2 8l4 3M10 5l4 3-4 3"/></svg>',
-  link:
-    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 9a3 3 0 0 0 4.2 0l1.6-1.6a3 3 0 0 0-4.2-4.2L7.5 4M9 7a3 3 0 0 0-4.2 0L3.2 8.6a3 3 0 0 0 4.2 4.2L8.5 12"/></svg>',
 };
 
 // Toggle every one of these, regardless of which buttons render. The
@@ -154,7 +128,13 @@ export function selectionToolbar(config: SelectionToolbarConfig = {}): Extension
   // selections inside a table cell's contenteditable (which never reach
   // CM's selection state). It shares this config's button list and
   // filters to the cell-eligible subset itself.
-  return [field, suppressionPlugin, keymap.of(TOOLBAR_KEYMAP), toolbarTheme, cellFormatting(buttons)];
+  return [
+    field,
+    suppressionPlugin,
+    keymap.of(TOOLBAR_KEYMAP),
+    toolbarChromeTheme,
+    cellFormatting(buttons),
+  ];
 }
 
 // The tooltip exists iff the selection is a single, non-empty range that
@@ -189,25 +169,10 @@ function createToolbarView(view: EditorView, buttons: readonly InlineFormat[]): 
   const dom = document.createElement('div');
   dom.className = 'cm-atomic-selection-toolbar';
 
-  const entries = buttons.map((format) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'cm-atomic-selection-toolbar-button';
-    button.setAttribute('aria-label', BUTTON_LABELS[format]);
-    button.title = BUTTON_LABELS[format];
-    button.innerHTML = BUTTON_ICONS[format];
-
-    // `preventDefault` on pointerdown keeps the editor's selection and
-    // focus intact — without it, pressing the button would move focus
-    // to the button, collapse the selection, and the toggle would have
-    // nothing to act on.
-    button.addEventListener('pointerdown', (event) => event.preventDefault());
-    button.addEventListener('click', () => {
-      BUTTON_COMMANDS[format](view);
-    });
-
-    dom.appendChild(button);
-    return { format, button };
+  // The shared builder owns button/separator DOM, icons, and aria; the
+  // main bar supplies its CM-command click path here.
+  const entries = buildToolbarButtons(dom, buttons, (format) => {
+    BUTTON_COMMANDS[format](view);
   });
 
   const sync = (state: EditorState): void => {
@@ -318,43 +283,3 @@ const suppressionPlugin = ViewPlugin.fromClass(
     }
   },
 );
-
-// Dark-fallback palette only — consumers theme through the
-// `--atomic-editor-*` CSS variables (this package's convention; there
-// are deliberately no `[data-theme]` rules here). Fallbacks match
-// `atomic-theme.ts` exactly so a standalone editor looks consistent.
-const toolbarTheme = EditorView.baseTheme({
-  '.cm-tooltip.cm-atomic-selection-toolbar': {
-    display: 'flex',
-    gap: '2px',
-    padding: '2px 4px',
-    backgroundColor: 'var(--atomic-editor-bg-surface, #2d2d2d)',
-    border: '1px solid var(--atomic-editor-border, #3d3d3d)',
-    borderRadius: '6px',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-  },
-  '.cm-atomic-selection-toolbar-button': {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'transparent',
-    border: 'none',
-    borderRadius: '4px',
-    padding: '4px',
-    cursor: 'pointer',
-    color: 'var(--atomic-editor-fg-muted, #888)',
-  },
-  // `:not(:disabled)` so a disabled button (e.g. link on a multi-line
-  // selection) shows no hover affordance.
-  '.cm-atomic-selection-toolbar-button:hover:not(:disabled)': {
-    backgroundColor: 'var(--atomic-editor-bg, #1e1e1e)',
-    color: 'var(--atomic-editor-fg, #dcddde)',
-  },
-  '.cm-atomic-selection-toolbar-button:disabled': {
-    opacity: '0.4',
-    cursor: 'default',
-  },
-  '.cm-atomic-selection-toolbar-button.cm-atomic-selection-toolbar-active': {
-    color: 'var(--atomic-editor-accent-bright, #a78bfa)',
-  },
-});

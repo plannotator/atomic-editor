@@ -1,6 +1,6 @@
 import { type Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, type PluginValue } from '@codemirror/view';
-import { BUTTON_ICONS, BUTTON_LABELS } from './selection-toolbar';
+import { buildToolbarButtons } from './toolbar-chrome';
 import {
   getSelectionCharRange,
   setSelectionCharRange,
@@ -345,21 +345,11 @@ class CellFormattingBar implements PluginValue {
     bar.className = 'cm-tooltip cm-atomic-selection-toolbar cm-atomic-selection-toolbar-cell';
     bar.style.position = 'absolute';
 
-    for (const format of this.formats) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'cm-atomic-selection-toolbar-button';
-      button.setAttribute('aria-label', BUTTON_LABELS[format]);
-      button.title = BUTTON_LABELS[format];
-      button.innerHTML = BUTTON_ICONS[format];
-      // Keep the cell's DOM selection: without this, pressing the button
-      // moves focus off the cell and collapses the selection the toggle
-      // needs to act on.
-      button.addEventListener('pointerdown', (event) => event.preventDefault());
-      button.addEventListener('click', () => this.apply(format));
-      bar.appendChild(button);
-      this.entries.push({ format, button });
-    }
+    // Identical chrome to the main bar (icons, aria, the selection-
+    // preserving pointerdown) via the shared builder; the cell bar
+    // supplies its own raw-rewriting click path. Only text-style formats
+    // reach here, so the builder never emits a separator.
+    this.entries.push(...buildToolbarButtons(bar, this.formats, (format) => this.apply(format)));
 
     this.view.dom.appendChild(bar);
     this.bar = bar;
