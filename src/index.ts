@@ -21,5 +21,7 @@ export type {
   WikiLinkSuggestion,
   WikiLinksConfig,
 } from './wiki-links';
+export { defaultSlashCommands, slashCommandSource, slashCommands } from './slash-commands';
+export type { SlashCommandItem, SlashCommandsConfig } from './slash-commands';
 export { atomicEditorTheme, atomicMarkdownSyntax } from './atomic-theme';
 export { autoCloseCodeFence, extendEmphasisPair } from './edit-helpers';

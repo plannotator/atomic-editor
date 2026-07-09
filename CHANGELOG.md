@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [Unreleased]
+
+### Added
+
+- **Slash-command insert menu.** Typing `/` at the start of a line opens a
+  keyboard-navigable menu of block insertions (headings, lists, task list,
+  quote, code block, table, divider, link, image). Opt-in via the new
+  `slashCommands()` extension factory; custom items and default replacement
+  via `SlashCommandsConfig`.
+
+### Changed
+
+- `wikiLinks` suggestions now register through language data instead of the
+  autocomplete `override` config, so they compose with other completion
+  sources (like `slashCommands`). As a side effect, nested code-language
+  completions (e.g. HTML inside fences) can now surface while wiki-link
+  suggestions are enabled.
+
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part
