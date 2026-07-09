@@ -3,9 +3,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { EditorState, type EditorStateConfig, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { markdown } from '@codemirror/lang-markdown';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import {
   CompletionContext,
+  hasNextSnippetField,
   startCompletion,
   type CompletionResult,
   type CompletionSource,
@@ -21,6 +22,7 @@ import {
   type SlashCommandItem,
 } from '../slash-commands';
 import { wikiLinks } from '../wiki-links';
+import { tables } from '../table-widget';
 
 type Mounted = { host: HTMLElement; root: Root };
 const mounts: Mounted[] = [];
@@ -157,15 +159,20 @@ describe('slashCommandSource inserted bytes', () => {
     expect(view.state.doc.toString()).toBe('```\n\n```');
     expect(view.state.selection.main.head).toBe(3);
     expect(view.state.selection.main.empty).toBe(true);
+    // Contrast with Table below: the code block has a second tab stop.
+    expect(hasNextSnippetField(view.state)).toBe(true);
   });
 
-  it('inserts a 2×2 table and selects the first column placeholder', () => {
+  it('inserts a 2×2 table with no trapped snippet field, caret at doc end', () => {
     const view = applyCommand('/', 'Table', 1);
     expect(view.state.doc.toString()).toBe(
-      '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |',
+      '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n',
     );
-    expect(view.state.selection.main.from).toBe(2);
-    expect(view.state.selection.main.to).toBe(10);
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    expect(view.state.selection.main.empty).toBe(true);
+    // No snippet field left behind in the table range — that was the
+    // whole point of switching Table from a snippet to a custom apply.
+    expect(hasNextSnippetField(view.state)).toBe(false);
   });
 
   it('inserts a link and selects the text placeholder', () => {
@@ -219,6 +226,27 @@ describe('slashCommandSource config surface', () => {
     for (const option of result?.options ?? []) {
       expect(defaultLabels.has(option.label)).toBe(false);
     }
+  });
+
+  it('routes a custom apply item and drops an item with neither snippet nor apply', () => {
+    const spy = vi.fn();
+    const items: SlashCommandItem[] = [
+      { label: 'Stamp', apply: spy },
+      // No snippet and no apply — must be dropped from the options.
+      { label: 'Broken' } as SlashCommandItem,
+    ];
+    const result = runSource(slashCommandSource({ items }), '/', 1);
+    // 12 defaults + the valid Stamp = 13; Broken is dropped.
+    expect(result?.options.length).toBe(13);
+    expect(result?.options.some((o) => o.label === 'Broken')).toBe(false);
+
+    applyCommand('/', 'Stamp', 1, { items });
+    expect(spy).toHaveBeenCalledTimes(1);
+    // The wrapper extended the range left over the trigger slash: from is
+    // the slash position (0), to is the caret (1).
+    const [, , from, to] = spy.mock.calls[0];
+    expect(from).toBe(0);
+    expect(to).toBe(1);
   });
 
   it('exposes the twelve default commands in stable order', () => {
@@ -317,5 +345,77 @@ describe('slashCommands DOM integration', () => {
     const tooltip = await openSlashTooltip(view);
 
     expect(tooltip.querySelectorAll('li').length).toBe(12);
+  });
+});
+
+// Applies the Table option through the range the source hands CM6,
+// against a view the caller composes (with or without tables()).
+function applyTable(view: EditorView): void {
+  const result = runSource(slashCommandSource(), '/', 1);
+  const option = result?.options.find((o) => o.label === 'Table');
+  if (typeof option?.apply !== 'function') throw new Error('apply is not a function');
+  option.apply(view, option, result!.from, 1);
+}
+
+// The same double-rAF flush insertTable's focus handoff schedules.
+const flushFrames = () =>
+  new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+describe('slashCommands table widget handoff', () => {
+  it('renders the table widget and focuses the first header cell', async () => {
+    // GFM base so lezer emits the `Table` node the widget replaces —
+    // bare markdown() is CommonMark-only and never parses a table, which
+    // is exactly how AtomicCodeMirrorEditor configures markdown().
+    const view = makeView('/', [
+      markdown({ base: markdownLanguage }),
+      tables(),
+      slashCommands(),
+    ]);
+    applyTable(view);
+
+    // The dispatched bytes are the fallback, cursor on the trailing
+    // blank line — regardless of whether the DOM handoff lands.
+    expect(view.state.doc.toString()).toBe(
+      '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n',
+    );
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+
+    await flushFrames();
+
+    const widget = view.dom.querySelector('.cm-atomic-table');
+    expect(widget).not.toBeNull();
+
+    // The handoff targets the first header cell's source element.
+    const source = widget?.querySelector<HTMLElement>(
+      'thead th .cm-atomic-table-cell-source',
+    );
+    expect(source).not.toBeNull();
+    // happy-dom implements HTMLElement.focus()/activeElement, so the
+    // handoff observably lands on (or within) that cell's source. Do NOT
+    // accept `active.contains(source)` — document.body would pass that
+    // trivially and mask a focus regression.
+    const active = document.activeElement;
+    expect(active).not.toBe(document.body);
+    expect(active === source || source!.contains(active)).toBe(true);
+  });
+});
+
+describe('slashCommands table insert without the tables() extension', () => {
+  it('inserts the bytes and keeps the fallback caret, no throw', async () => {
+    const view = makeView('/', [markdown(), slashCommands()]);
+    // No tables() means no widget; the focus handoff must no-op cleanly.
+    expect(() => {
+      applyTable(view);
+    }).not.toThrow();
+
+    await flushFrames();
+
+    expect(view.state.doc.toString()).toBe(
+      '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n',
+    );
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    expect(view.state.selection.main.empty).toBe(true);
+    // Nothing rendered a table widget.
+    expect(view.dom.querySelector('.cm-atomic-table')).toBeNull();
   });
 });
