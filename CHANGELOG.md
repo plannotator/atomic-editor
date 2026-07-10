@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [Unreleased]
+
+### Added
+
+- `AtomicDiffEditor`, a frozen unified Markdown review surface backed by
+  `@codemirror/merge`: inline insertions/deletions, change navigation, gutter
+  rails, keyboard-accessible unchanged-region collapse, large-document diff
+  safeguards, and the existing consumer `extensions` seam.
+
+### Changed
+
+- Built-in table, image, task, inline-preview, and wiki-link decorations now
+  cooperate with unified diff state. Unchanged atomic content stays rendered;
+  changed atomic ranges expose source so review evidence cannot be hidden by a
+  replacement widget.
+
 ## [0.7.0]
 
 ### Changed
@@ -161,7 +177,6 @@ fork of `@atomic-editor/editor`; upstream base: 0.4.3).
   faithfully represent (nested maps, comments, block scalars, unclosed fence)
   falls back to the styled raw text. Exported standalone as
   `frontmatterProperties()`.
-
 ## [0.4.3]
 
 Table-editing hardening. The WYSIWYG table widget is the most custom part

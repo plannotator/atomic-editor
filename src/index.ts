@@ -3,6 +3,12 @@ export type {
   AtomicCodeMirrorEditorHandle,
   AtomicCodeMirrorEditorProps,
 } from './AtomicCodeMirrorEditor';
+export { AtomicDiffEditor } from './AtomicDiffEditor';
+export type {
+  AtomicDiffCollapseOptions,
+  AtomicDiffEditorHandle,
+  AtomicDiffEditorProps,
+} from './AtomicDiffEditor';
 
 // Individual extension factories. Exposed so consumers can compose a
 // stripped-down editor, bisect regressions, or cherry-pick a single
