@@ -37,6 +37,14 @@ function mountDiff(props: AtomicDiffEditorProps): MountedDiff {
   return mounted;
 }
 
+function rerenderDiff(mounted: MountedDiff, props: AtomicDiffEditorProps): void {
+  act(() => {
+    mounted.root.render(
+      <AtomicDiffEditor {...props} editorHandleRef={mounted.handleRef} />,
+    );
+  });
+}
+
 afterEach(() => {
   for (const mounted of mounts.splice(0)) {
     act(() => mounted.root.unmount());
@@ -325,6 +333,34 @@ describe('AtomicDiffEditor', () => {
     });
 
     expect(host.querySelector('.cm-atomic-diff-overview')).toBeNull();
+  });
+
+  it('reacts to primitive review-policy props without changing either revision', () => {
+    const revisions = {
+      originalMarkdown: 'Before review',
+      modifiedMarkdown: 'After review',
+    } as const;
+    const mounted = mountDiff({
+      ...revisions,
+      ariaLabel: 'Initial comparison',
+      gutter: true,
+    });
+
+    expect(mounted.host.querySelector('.cm-changeGutter')).not.toBeNull();
+    expect(mounted.handleRef.current?.getContentDOM()?.closest('.cm-editor')?.getAttribute('aria-label'))
+      .toBe('Initial comparison');
+
+    rerenderDiff(mounted, {
+      ...revisions,
+      ariaLabel: 'Updated comparison',
+      gutter: false,
+    });
+
+    expect(mounted.host.querySelector('.cm-changeGutter')).toBeNull();
+    expect(mounted.handleRef.current?.getContentDOM()?.closest('.cm-editor')?.getAttribute('aria-label'))
+      .toBe('Updated comparison');
+    expect(mounted.handleRef.current?.getOriginalMarkdown()).toBe(revisions.originalMarkdown);
+    expect(mounted.handleRef.current?.getMarkdown()).toBe(revisions.modifiedMarkdown);
   });
 
   it('navigates changed regions through the public handle', () => {

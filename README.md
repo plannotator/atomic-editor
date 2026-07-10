@@ -47,8 +47,8 @@ base — extracted to stand on its own, and hardened on real user documents.
   `data-theme="light"` attribute, every color overridable.
 - **Minimal find panel** (Ctrl/Cmd+F) styled to match the editor.
 - **Frozen inline diffs.** Two revisions render as one review document with
-  inline insertions/deletions, change navigation, gutter rails, and collapsible
-  unchanged regions.
+  inline insertions/deletions, change navigation, gutter rails, and complete
+  unchanged context.
 
 ## Install
 

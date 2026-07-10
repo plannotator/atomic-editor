@@ -91,13 +91,24 @@ export interface AtomicDiffEditorProps {
   readonly highlightChanges?: boolean;
   /** Whether deleted fragments receive Markdown syntax highlighting. Defaults to true. */
   readonly syntaxHighlightDeletions?: boolean;
-  /** Diff-algorithm safeguards for large or highly divergent documents. */
+  /**
+   * Diff-algorithm safeguards for large or highly divergent documents.
+   * Captured by the mounted comparison. Pass a stable object; change
+   * `documentId` to deliberately rebuild when only this value changes.
+   */
   readonly diffConfig?: DiffConfig;
-  /** Grammars to use in fenced code blocks. */
+  /**
+   * Grammars to use in fenced code blocks. Captured by the mounted comparison;
+   * pass a stable array and change `documentId` to deliberately rebuild when
+   * only this value changes.
+   */
   readonly codeLanguages?: readonly LanguageDescription[];
   /**
    * Consumer extensions appended after the built-ins. This is the same seam
-   * used by wiki links and other domain decorations.
+   * used by wiki links and other domain decorations. Captured by the mounted
+   * comparison; pass a stable array and feed changing data through extension
+   * callbacks that close over live state. Change `documentId` to deliberately
+   * rebuild when only this array changes.
    */
   readonly extensions?: readonly Extension[];
   /** Handles rendered links without enabling document edits. */
@@ -207,11 +218,23 @@ export function AtomicDiffEditor({
       view.destroy();
       viewRef.current = null;
     };
-    // Extensions are captured at mount time, just like AtomicCodeMirrorEditor.
+    // Caller-provided extensions, language descriptions, and diffConfig are
+    // captured at mount time, just like AtomicCodeMirrorEditor. Primitive UI
+    // policy remains reactive below so a host setting cannot leave the React
+    // chrome disagreeing with CodeMirror's internal configuration.
     // Either revision changing always remounts because a version-reader may
     // compare multiple revisions of the same documentId in one session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, modifiedMarkdown, originalMarkdown]);
+  }, [
+    allowInlineDiffs,
+    ariaLabel,
+    documentId,
+    gutter,
+    highlightChanges,
+    modifiedMarkdown,
+    originalMarkdown,
+    syntaxHighlightDeletions,
+  ]);
 
   useEffect(() => {
     if (!editorHandleRef) return;
