@@ -17,6 +17,7 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { intersectsAtomicDiffChange, isAtomicDiffView } from './diff-context';
 import { treeGrowthEffect, treeProgressPlugin } from './tree-progress';
 
 // GFM tables as a WYSIWYG block widget.
@@ -740,6 +741,8 @@ class TableWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'cm-atomic-table';
+    const readOnly = isAtomicDiffView(view.state);
+    if (readOnly) wrap.dataset.readonly = 'true';
 
     // Positioning context for the hover affordances. The controls anchor
     // to this inner box (which hugs the table via `width: max-content`),
@@ -755,6 +758,7 @@ class TableWidget extends WidgetType {
     wrap.appendChild(inner);
 
     const table = document.createElement('table');
+    if (readOnly) table.setAttribute('aria-readonly', 'true');
     inner.appendChild(table);
 
     const thead = document.createElement('thead');
@@ -778,8 +782,10 @@ class TableWidget extends WidgetType {
 
     // Hover controls overlay the table's edges; append them last so
     // they paint above the cells.
-    for (const control of makeTableAffordances(view, wrap)) {
-      inner.appendChild(control);
+    if (!readOnly) {
+      for (const control of makeTableAffordances(view, wrap)) {
+        inner.appendChild(control);
+      }
     }
 
     return wrap;
@@ -877,6 +883,15 @@ function makeCell(
   // uniformly to every inline mark inside cells.
   cell.appendChild(source);
   renderCellSourceDecorated(source);
+  attachCellLinkOpener(source, view);
+
+  if (isAtomicDiffView(view.state)) {
+    source.contentEditable = 'false';
+    source.spellcheck = false;
+    source.tabIndex = -1;
+    refreshCellPreview(cell);
+    return cell;
+  }
 
   // Commit the cell's current DOM text to `dataset.raw`, re-render its
   // decorated form (so marks the user just typed — e.g. a new `**` pair
@@ -964,36 +979,6 @@ function makeCell(
     openCellMenu(view, cell, event.clientX, event.clientY);
   });
 
-  // Link-icon open. The external-link icon is rendered as a real
-  // `.cm-atomic-link-icon` element (see `renderCellToken`), not a CSS
-  // `::after` pseudo — a pseudo-element has no event target, so clicking
-  // its painted region dispatched no pointer event and the link never
-  // opened. We open on `click` (a proper popup-activation gesture, so
-  // `window.open` isn't blocked) and block the caret on `pointerdown`.
-  const linkIconFromEvent = (event: Event): HTMLElement | null => {
-    const target = event.target;
-    if (!(target instanceof Element)) return null;
-    return target.closest<HTMLElement>('.cm-atomic-link-icon');
-  };
-
-  source.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
-    // Block focus / caret placement when pressing the icon; the open
-    // happens on the following `click`.
-    if (linkIconFromEvent(event)) event.preventDefault();
-  });
-
-  source.addEventListener('click', (event) => {
-    const icon = linkIconFromEvent(event);
-    if (!icon) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const url = icon.closest<HTMLElement>('.cm-atomic-link-wrap')?.dataset.url;
-    if (!url) return;
-    event.preventDefault();
-    event.stopPropagation();
-    view.state.facet(tableLinkClickFacet)(url);
-  });
-
   // When the cell has an image and the source is visually hidden,
   // clicks land on the cell/image/empty space but not on the source
   // itself. Route every pointerdown inside the cell to a focus on
@@ -1018,6 +1003,33 @@ function makeCell(
   refreshCellPreview(cell);
 
   return cell;
+}
+
+// Link-icon open is available in both editable and frozen table widgets. The
+// source stays immutable in diff mode, but navigation remains a safe reader
+// interaction and continues to use the consumer's existing callback seam.
+function attachCellLinkOpener(source: HTMLElement, view: EditorView): void {
+  const linkIconFromEvent = (event: Event): HTMLElement | null => {
+    const target = event.target;
+    if (!(target instanceof Element)) return null;
+    return target.closest<HTMLElement>('.cm-atomic-link-icon');
+  };
+
+  source.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    if (linkIconFromEvent(event)) event.preventDefault();
+  });
+
+  source.addEventListener('click', (event) => {
+    const icon = linkIconFromEvent(event);
+    if (!icon) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const url = icon.closest<HTMLElement>('.cm-atomic-link-wrap')?.dataset.url;
+    if (!url) return;
+    event.preventDefault();
+    event.stopPropagation();
+    view.state.facet(tableLinkClickFacet)(url);
+  });
 }
 
 // ---- context menu -------------------------------------------------
@@ -1403,6 +1415,9 @@ function buildTableWidgets(state: EditorState): DecorationSet {
       // Block-replace needs whole-line coverage.
       const startLine = doc.lineAt(node.from);
       const endLine = doc.lineAt(node.to);
+      if (intersectsAtomicDiffChange(state, startLine.from, endLine.to)) {
+        return false;
+      }
 
       // Cursor-on-the-last-line exemption. Reveal the table's raw source
       // (skip the widget) while the caret sits on its final line.

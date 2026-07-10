@@ -46,6 +46,9 @@ base — extracted to stand on its own, and hardened on real user documents.
 - **Themed with CSS variables** — dark by default, light via a single
   `data-theme="light"` attribute, every color overridable.
 - **Minimal find panel** (Ctrl/Cmd+F) styled to match the editor.
+- **Frozen inline diffs.** Two revisions render as one review document with
+  inline insertions/deletions, change navigation, gutter rails, and complete
+  unchanged context.
 
 ## Install
 
@@ -53,7 +56,7 @@ base — extracted to stand on its own, and hardened on real user documents.
 npm install @atomic-editor/editor \
   @codemirror/state @codemirror/view @codemirror/commands \
   @codemirror/autocomplete @codemirror/language @codemirror/search \
-  @codemirror/lang-markdown \
+  @codemirror/lang-markdown @codemirror/merge \
   @lezer/common @lezer/highlight \
   react react-dom
 ```
@@ -88,6 +91,54 @@ function App() {
 
 The editor fills its parent — wrap it in a height-bounded flex or grid
 container.
+
+### Frozen inline diff
+
+`AtomicDiffEditor` renders the newer revision as the document and projects
+deletions where they used to be. It is structurally separate from the editable
+component: the content DOM is not editable, task/table controls are static, and
+document-changing transactions are rejected at both the CodeMirror state and
+view-dispatch boundaries.
+
+```tsx
+import { AtomicDiffEditor, wikiLinks } from '@atomic-editor/editor';
+import '@atomic-editor/editor/styles.css';
+
+<AtomicDiffEditor
+  originalMarkdown={savedRevision}
+  modifiedMarkdown={currentRevision}
+  extensions={[
+    wikiLinks({
+      resolve: (target) => store.resolve(target),
+      onOpen: (target) => router.open(target),
+    }),
+  ]}
+/>;
+```
+
+The same `extensions` seam used by the editable surface is appended after the
+diff and built-in Markdown decorations. Unchanged frontmatter, tables, images,
+tasks, and wiki links keep their rich reader rendering. When a change
+intersects one of those atomic ranges, its source is shown so the diff cannot
+disappear behind a replacement widget.
+
+The entire newer document remains visible, including every unchanged line.
+The overview rail on the right maps additions, deletions, and replacements
+across the file and jumps to the nearest change when clicked. It also supports
+arrow-key navigation when focused.
+
+Useful options:
+
+- `allowInlineDiffs`, `highlightChanges`, and `gutter` — all default to `true`.
+- `showOverview={false}` — hide the clickable change overview rail.
+- `diffConfig={{ scanLimit, timeout }}` — override the bounded large-document
+  diff policy when a host has different latency/precision needs.
+- `showToolbar={false}` — hide the built-in count and previous/next navigation
+  when the host supplies its own controls through `AtomicDiffEditorHandle`.
+
+The handle's `getMarkdown()` and `getOriginalMarkdown()` return the exact input
+strings, including CRLF line endings; they do not reconstruct text from
+CodeMirror's normalized rendering model.
 
 ### Imperative handle
 

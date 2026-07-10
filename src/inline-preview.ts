@@ -5,9 +5,9 @@ import {
   Prec,
   StateEffect,
   StateField,
+  type EditorState,
   type Extension,
   type Range,
-  type Text,
 } from '@codemirror/state';
 import {
   Decoration,
@@ -18,6 +18,10 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
+import {
+  intersectsAtomicDiffChange,
+  isAtomicDiffView,
+} from './diff-context';
 import { treeGrowthEffect, treeProgressPlugin } from './tree-progress';
 
 // Inline preview — the Obsidian "Live Preview" model.
@@ -260,6 +264,11 @@ class TaskCheckboxWidget extends WidgetType {
     input.checked = this.checked;
     input.className = 'cm-atomic-list-marker cm-atomic-task-checkbox';
     input.setAttribute('contenteditable', 'false');
+    if (isAtomicDiffView(view.state)) {
+      input.disabled = true;
+      input.setAttribute('aria-label', this.checked ? 'Completed task' : 'Incomplete task');
+      return input;
+    }
     input.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -293,12 +302,14 @@ class TaskCheckboxWidget extends WidgetType {
 // uncommon multi-line forms.
 function pushReplace(
   ranges: Range<Decoration>[],
-  doc: Text,
+  state: EditorState,
   from: number,
   to: number,
   spec: Parameters<typeof Decoration.replace>[0] = {},
 ): void {
   if (from >= to) return;
+  if (intersectsAtomicDiffChange(state, from, to)) return;
+  const doc = state.doc;
   const startLine = doc.lineAt(from);
   if (to <= startLine.to) {
     ranges.push(Decoration.replace(spec).range(from, to));
@@ -364,6 +375,7 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
   // aren't included; they already have their own widget UX and the
   // line-based reveal is the right fit for `![alt](url)`.
   const activeLinkStarts = new Set<number>();
+  const diffSourceLinkStarts = new Set<number>();
 
   // Single pre-order walk. A tree walk visits a parent before its
   // children, which lets us compute two pieces of look-ahead state on
@@ -406,6 +418,22 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
           }
         }
       }
+      if (node.name === 'Link') {
+        // Lezer parses the inner `[target|label]` portion of a wiki link as
+        // an ordinary Link node. Expand by one bracket on each side when
+        // present, then reveal every delimiter when any part changed. This
+        // keeps `[[target|label]]` intact as review evidence instead of
+        // letting the normal link preview hide half of its brackets.
+        const sourceFrom = node.from > 0 && doc.sliceString(node.from - 1, node.from) === '['
+          ? node.from - 1
+          : node.from;
+        const sourceTo = node.to < doc.length && doc.sliceString(node.to, node.to + 1) === ']'
+          ? node.to + 1
+          : node.to;
+        if (intersectsAtomicDiffChange(state, sourceFrom, sourceTo)) {
+          diffSourceLinkStarts.add(node.from);
+        }
+      }
       const lineClass = LINE_CLASS_BY_BLOCK[node.name];
       if (lineClass) {
         const firstLine = doc.lineAt(node.from);
@@ -435,7 +463,8 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
             parent = parent.parent;
           }
           if (parent && parent.name === 'Link') {
-            shouldHide = !activeLinkStarts.has(parent.from);
+            shouldHide = !activeLinkStarts.has(parent.from) &&
+              !diffSourceLinkStarts.has(parent.from);
           } else {
             shouldHide = !activeLines.has(lineNum);
           }
@@ -450,7 +479,7 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
               hideTo++;
             }
           }
-          pushReplace(ranges, doc, node.from, hideTo);
+          pushReplace(ranges, state, node.from, hideTo);
         }
       }
 
@@ -464,7 +493,7 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
       if (node.name === 'Escape' && node.to - node.from >= 2) {
         const lineNum = doc.lineAt(node.from).number;
         if (!activeLines.has(lineNum)) {
-          pushReplace(ranges, doc, node.from, node.from + 1);
+          pushReplace(ranges, state, node.from, node.from + 1);
         }
       }
 
@@ -521,14 +550,23 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
 
         if (taskFrom !== undefined) {
           // Hide `- ` (ListMark through the space before `[`).
-          pushReplace(ranges, doc, node.from, taskFrom);
+          // When the task marker itself changed, keep the list prefix too so
+          // the evidence remains valid Markdown (`- [x]`) rather than an
+          // orphaned `[x]` fragment.
+          if (!intersectsAtomicDiffChange(
+            state,
+            taskFrom,
+            Math.min(line.to, taskFrom + 3),
+          )) {
+            pushReplace(ranges, state, node.from, taskFrom);
+          }
         } else {
           const markText = doc.sliceString(node.from, node.to);
           if (markText === '-' || markText === '*' || markText === '+') {
             // Bullet: substitute with the fixed-width marker
             // widget, swallowing the trailing space so content
             // starts precisely at padding-left.
-            pushReplace(ranges, doc, node.from, markEnd, { widget: BULLET_WIDGET });
+            pushReplace(ranges, state, node.from, markEnd, { widget: BULLET_WIDGET });
           } else {
             // Ordered list (or anything else with a non-standard
             // mark text like `1.`, `42.`): keep the text visible
@@ -542,7 +580,7 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
               ),
             );
             if (hasTrailingSpace) {
-              pushReplace(ranges, doc, node.to, markEnd);
+              pushReplace(ranges, state, node.to, markEnd);
             }
           }
         }
@@ -563,8 +601,10 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
         // edit the marker without it vanishing.
         const line = doc.lineAt(node.from);
         if (!activeLines.has(line.number)) {
-          ranges.push(Decoration.line({ class: 'cm-atomic-hr' }).range(line.from));
-          pushReplace(ranges, doc, line.from, line.to);
+          if (!intersectsAtomicDiffChange(state, line.from, line.to)) {
+            ranges.push(Decoration.line({ class: 'cm-atomic-hr' }).range(line.from));
+          }
+          pushReplace(ranges, state, line.from, line.to);
         }
       }
 
@@ -585,7 +625,7 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
           // back up." The tradeoff is one line of empty space
           // above each rendered image, which actually reads a bit
           // cleaner as visual separation anyway.
-          pushReplace(ranges, doc, node.from, node.to);
+          pushReplace(ranges, state, node.from, node.to);
         }
       }
 
@@ -601,10 +641,10 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
           node.to < doc.length &&
           doc.sliceString(node.to, node.to + 1) === ' ';
         const replaceTo = hasTrailingSpace ? node.to + 1 : node.to;
-        pushReplace(ranges, doc, node.from, replaceTo, {
+        pushReplace(ranges, state, node.from, replaceTo, {
           widget: new TaskCheckboxWidget(checked),
         });
-        if (checked) {
+        if (checked && !intersectsAtomicDiffChange(state, node.from, replaceTo)) {
           const lineNum = doc.lineAt(node.from).number;
           const line = doc.line(lineNum);
           ranges.push(

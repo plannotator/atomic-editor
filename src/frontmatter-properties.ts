@@ -29,6 +29,7 @@ import type { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, EditorView, keymap, WidgetType } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { intersectsAtomicDiffChange, isAtomicDiffView } from './diff-context';
 
 // ---- model ----------------------------------------------------------
 
@@ -206,23 +207,58 @@ class PropertiesWidget extends WidgetType {
     title.className = 'cm-atomic-fm-title';
     title.textContent = 'Properties';
     header.appendChild(title);
-    header.appendChild(makeSourceButton(view));
+    const readOnly = isAtomicDiffView(view.state);
+    if (!readOnly) header.appendChild(makeSourceButton(view));
     wrap.appendChild(header);
 
     const grid = document.createElement('div');
     grid.className = 'cm-atomic-fm-grid';
-    this.model.rows.forEach((row, i) => grid.appendChild(makeRow(view, row, i)));
+    this.model.rows.forEach((row, i) => {
+      grid.appendChild(readOnly ? makeReadOnlyRow(row, i) : makeRow(view, row, i));
+    });
     wrap.appendChild(grid);
 
-    const add = document.createElement('button');
-    add.type = 'button';
-    add.className = 'cm-atomic-fm-add';
-    add.textContent = '+ Add property';
-    add.addEventListener('click', () => addProperty(view, this.model));
-    wrap.appendChild(add);
+    if (!readOnly) {
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'cm-atomic-fm-add';
+      add.textContent = '+ Add property';
+      add.addEventListener('click', () => addProperty(view, this.model));
+      wrap.appendChild(add);
+    }
 
     return wrap;
   }
+}
+
+function makeReadOnlyRow(row: PropertyRow, index: number): HTMLElement {
+  const rowEl = document.createElement('div');
+  rowEl.className = 'cm-atomic-fm-row';
+  rowEl.dataset.index = String(index);
+
+  const key = document.createElement('div');
+  key.className = 'cm-atomic-fm-key';
+  key.textContent = row.key;
+  rowEl.appendChild(key);
+
+  const value = document.createElement('div');
+  value.className = 'cm-atomic-fm-value';
+  if (row.items === null) {
+    const scalar = document.createElement('div');
+    scalar.className = 'cm-atomic-fm-scalar';
+    scalar.textContent = row.value;
+    value.appendChild(scalar);
+  } else {
+    value.classList.add('cm-atomic-fm-chips');
+    for (const item of row.items) {
+      const chip = document.createElement('span');
+      chip.className = 'cm-atomic-fm-chip';
+      chip.textContent = item;
+      value.appendChild(chip);
+    }
+  }
+  rowEl.appendChild(value);
+  return rowEl;
 }
 
 // Raw mode replaces the grid with the styled YAML text; this pill above
@@ -478,6 +514,9 @@ function buildDecorations(state: EditorState): DecorationSet {
   }
 
   const endLine = state.doc.lineAt(node.to);
+  if (intersectsAtomicDiffChange(state, 0, endLine.to)) {
+    return Decoration.none;
+  }
   const ranges: Range<Decoration>[] = [
     Decoration.replace({ widget: new PropertiesWidget(model), block: true }).range(
       0,

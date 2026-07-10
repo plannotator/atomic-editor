@@ -2314,6 +2314,97 @@ async function probeEditEdges(page) {
   await resetToCanonical(page);
 }
 
+async function probeInlineDiff(page) {
+  const pageErrorCountBefore = pageErrors.length;
+  log('info', `navigating to ${base}/?mode=diff`);
+  await page.goto(`${base}/?mode=diff`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.atomic-cm-diff-editor');
+  await page.waitForSelector('.cm-atomic-diff-overview');
+  await page.waitForTimeout(250);
+
+  const before = await page.evaluate(() => {
+    const editor = document.querySelector('.atomic-cm-diff-editor');
+    const surface = document.querySelector('.cm-atomic-diff-surface');
+    const scroller = document.querySelector('.cm-scroller');
+    const overview = document.querySelector('.cm-atomic-diff-overview');
+    const content = document.querySelector('.cm-content');
+    if (!editor || !surface || !scroller || !overview || !content) return null;
+
+    const surfaceRect = surface.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    const overviewRect = overview.getBoundingClientRect();
+    return {
+      collapsedRegions: document.querySelectorAll('.cm-collapsedLines').length,
+      contentEditable: content.getAttribute('contenteditable'),
+      overviewAtSurfaceEdge: Math.abs(surfaceRect.right - overviewRect.right) <= 1,
+      overviewSeparateFromScroller: scrollerRect.right <= overviewRect.left + 1,
+      pageClientHeight: document.documentElement.clientHeight,
+      pageScrollHeight: document.documentElement.scrollHeight,
+      scrollerClientHeight: scroller.clientHeight,
+      scrollerScrollHeight: scroller.scrollHeight,
+    };
+  });
+
+  if (!before) {
+    record('diff: required surface exists', 'fail', 'missing editor geometry');
+    return;
+  }
+
+  record(
+    'diff: frozen content',
+    before.contentEditable === 'false' ? 'pass' : 'fail',
+    `contenteditable=${JSON.stringify(before.contentEditable)}`,
+  );
+  record(
+    'diff: full context remains visible',
+    before.collapsedRegions === 0 ? 'pass' : 'fail',
+    `collapsedRegions=${before.collapsedRegions}`,
+  );
+  const boundedScroller = before.scrollerScrollHeight > before.scrollerClientHeight &&
+    before.pageScrollHeight === before.pageClientHeight;
+  record(
+    'diff: editor owns vertical scrolling',
+    boundedScroller ? 'pass' : 'fail',
+    `editor=${before.scrollerClientHeight}/${before.scrollerScrollHeight}px page=${before.pageClientHeight}/${before.pageScrollHeight}px`,
+  );
+  const separateOverview = before.overviewAtSurfaceEdge && before.overviewSeparateFromScroller;
+  record(
+    'diff: overview does not cover scrollbar',
+    separateOverview ? 'pass' : 'fail',
+    `surfaceEdge=${before.overviewAtSurfaceEdge} separate=${before.overviewSeparateFromScroller}`,
+  );
+
+  const overview = page.locator('.cm-atomic-diff-overview');
+  await overview.press('End');
+  await page.waitForFunction(() => {
+    const scroller = document.querySelector('.cm-scroller');
+    return scroller instanceof HTMLElement && scroller.scrollTop > 0;
+  });
+  const after = await page.evaluate(() => ({
+    activeMarkers: document.querySelectorAll('.cm-atomic-diff-overview-marker.active').length,
+    pageScrollY: window.scrollY,
+    scrollerScrollTop: document.querySelector('.cm-scroller')?.scrollTop ?? 0,
+    status: document.querySelector('.cm-atomic-diff-status')?.textContent ?? '',
+  }));
+  const statusMatch = /^Change (\d+) of (\d+)$/.exec(after.status.trim());
+  const reachedLastChange = statusMatch !== null && statusMatch[1] === statusMatch[2];
+  record(
+    'diff: overview navigates inside editor',
+    reachedLastChange && after.activeMarkers === 1 && after.scrollerScrollTop > 0 && after.pageScrollY === 0
+      ? 'pass'
+      : 'fail',
+    `status=${JSON.stringify(after.status)} editorScroll=${Math.round(after.scrollerScrollTop)}px pageScroll=${after.pageScrollY}px active=${after.activeMarkers}`,
+  );
+  const diffPageErrors = pageErrors.slice(pageErrorCountBefore);
+  record(
+    'diff: no page errors',
+    diffPageErrors.length === 0 ? 'pass' : 'fail',
+    diffPageErrors.length === 0 ? 'none' : diffPageErrors.join(' | '),
+  );
+
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-inline-diff.png'), fullPage: false });
+}
+
 // Page-scoped predicate (passed to page.evaluate) — true when some
 // rendered `.cm-line` contains the given substring.
 function hasLineWithText(s) {
@@ -2376,6 +2467,10 @@ async function run() {
     await probeScroll(page);
     // Destructive edge edits — run last; each resets the doc to canonical.
     await probeEditEdges(page);
+    // Separate frozen surface. This navigation is intentionally last so the
+    // editable probes retain one shared editor state and the diff keeps its
+    // own screenshot and layout assertions.
+    await probeInlineDiff(page);
 
     const failCount = results.filter((r) => r.status === 'fail').length;
     const warnCount = results.filter((r) => r.status === 'warn').length;
