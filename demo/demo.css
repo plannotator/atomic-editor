@@ -1,6 +1,5 @@
-/* Atomic Editor — demo showcase. "Lab notebook" aesthetic: a page of
- * graph paper under an instrument-panel chrome, monospace labels, one
- * violet accent used sparingly.
+/* Atomic Editor — demo showcase. A restrained application shell with
+ * an opaque, wide editing surface and one violet accent used sparingly.
  *
  * Consistency strategy: the canonical palette is declared as the
  * editor's OWN `--atomic-editor-*` tokens on :root, so the chrome and
@@ -12,12 +11,10 @@
   --atomic-editor-fg: #dcddde;
   --atomic-editor-fg-muted: #888c94;
   --atomic-editor-fg-faint: #5f636b;
-  --atomic-editor-bg: #1e1e20;
-  /* Panel sits darker than the page so the reading column lifts off the
-   * graph-paper grid like a sheet on a workbench. */
-  --atomic-editor-bg-panel: #141416;
-  --atomic-editor-bg-surface: #2a2a2c;
-  --atomic-editor-border: #34343a;
+  --atomic-editor-bg: #1b1b1e;
+  --atomic-editor-bg-panel: #171719;
+  --atomic-editor-bg-surface: #252529;
+  --atomic-editor-border: #303036;
   --atomic-editor-accent: #7c3aed;
   --atomic-editor-accent-bright: #a78bfa;
   --atomic-editor-accent-soft: color-mix(in srgb, #7c3aed 72%, white 28%);
@@ -25,6 +22,9 @@
   --atomic-editor-link-hover: #a5b4fc;
   --atomic-editor-code-bg: #242329;
   --atomic-editor-selection-bg: color-mix(in srgb, #7c3aed 45%, transparent);
+  --demo-workspace-bg: #111113;
+  --demo-editor-shadow: 0 0 0 1px rgb(255 255 255 / 0.025), 0 18px 48px rgb(0 0 0 / 0.28);
+  --demo-focus-ring: #f4f4f5;
 }
 
 :root[data-theme='light'] {
@@ -42,18 +42,21 @@
   --atomic-editor-link-hover: #7c3aed;
   --atomic-editor-code-bg: #f3f1fb;
   --atomic-editor-selection-bg: color-mix(in srgb, #8250df 26%, transparent);
+  --demo-workspace-bg: #f4f5f7;
+  --demo-editor-shadow: 0 0 0 1px rgb(15 23 42 / 0.025), 0 18px 48px rgb(15 23 42 / 0.08);
+  --demo-focus-ring: #18181b;
 }
 
 :root {
   /* IBM Plex Mono powers in-editor code (and the source pane) via the
-   * editor's own font token; Martian Mono is the instrument/wordmark
-   * face used only in the chrome. */
+   * editor's own font token; Martian Mono is reserved for compact
+   * instrument labels in the chrome. */
   --atomic-editor-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --lab-display: 'Martian Mono', 'IBM Plex Mono', ui-monospace, monospace;
   --lab-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --lab-grid: color-mix(in srgb, var(--atomic-editor-fg) 10%, transparent);
   --lab-accent-tint: color-mix(in srgb, var(--atomic-editor-accent) 15%, transparent);
-  --atomic-editor-radius: 6px;
+  --atomic-editor-measure: 92ch;
+  --atomic-editor-radius: 8px;
 }
 
 html,
@@ -76,7 +79,7 @@ body {
   grid-template-rows: auto 1fr;
   height: 100%;
   min-height: 0;
-  background: var(--atomic-editor-bg);
+  background: var(--demo-workspace-bg);
 }
 
 /* ---- shared chrome primitives ------------------------------------- */
@@ -96,7 +99,9 @@ body {
 
 .demo-chrome {
   background: var(--atomic-editor-bg-panel);
-  border-bottom: 1px solid var(--atomic-editor-border);
+  box-shadow: 0 1px 0 var(--atomic-editor-border);
+  position: relative;
+  z-index: 1;
   animation: lab-rise 0.4s ease both;
 }
 
@@ -106,8 +111,9 @@ body {
 .demo-topbar {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.4rem 1.25rem;
+  gap: 0.7rem;
+  min-height: 3.5rem;
+  padding: 0 1.5rem;
 }
 
 .demo-topbar-actions {
@@ -119,18 +125,17 @@ body {
 
 .demo-title {
   margin: 0;
-  font-family: var(--lab-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   display: inline-flex;
-  gap: 0.45em;
+  gap: 0.3em;
 }
 
 .demo-mark-soft {
-  color: var(--atomic-editor-fg-faint);
-  font-weight: 400;
+  color: var(--atomic-editor-fg-muted);
+  font-weight: 500;
 }
 
 /* Square ghost button for the theme toggle. */
@@ -138,8 +143,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   background: transparent;
   color: var(--atomic-editor-fg-muted);
@@ -170,7 +175,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.3em;
-  padding: 0.12rem 0.45rem;
+  padding: 0.18rem 0.5rem;
   border: 1px solid var(--atomic-editor-border);
   border-radius: 999px;
   color: var(--atomic-editor-fg-muted);
@@ -199,8 +204,9 @@ a.demo-pill:hover {
 }
 
 .demo-github {
-  font-family: var(--lab-mono);
-  font-size: 0.72rem;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 500;
   color: var(--atomic-editor-accent-bright);
   text-decoration: none;
   white-space: nowrap;
@@ -391,76 +397,62 @@ a.demo-pill:hover {
   max-width: 26rem;
 }
 
-/* ---- canvas: a page on graph paper -------------------------------- */
+/* ---- canvas ------------------------------------------------------- */
 
 .demo-canvas {
   position: relative;
   display: flex;
   min-height: 0;
   overflow: hidden;
+  padding: 1.25rem;
+  gap: 1.25rem;
+  background: var(--demo-workspace-bg);
   animation: lab-rise 0.5s ease 0.06s both;
 }
 
 .demo-editor-pane {
   position: relative;
-  flex: 1 1 0;
+  flex: 3 1 0;
   min-width: 0;
   overflow: hidden;
-  /* Faint graph-paper grid; the reading column gets a solid bg below so
-   * the grid reads only in the side margins — a sheet on a workbench. */
-  background-color: var(--atomic-editor-bg-panel);
-  background-image: radial-gradient(var(--lab-grid) 1px, transparent 1px);
-  background-size: 22px 22px;
-  background-position: center top;
+  border-radius: 0.875rem;
+  background: var(--atomic-editor-bg);
+  box-shadow: var(--demo-editor-shadow);
+  isolation: isolate;
 }
 
-/* The reading column as a "page" floating on the grid. The page fill
- * canNOT go on .cm-content: CodeMirror draws its selection in a layer at
- * z-index -2, BEHIND the content, so an opaque content background hides
- * the selection entirely. Instead we paint the page as a scroller
- * ::before at z-index -3 — behind the selection layer (so the highlight
- * shows on top of it) but above the pane's graph-paper grid (so the
- * column reads as a solid sheet while the grid stays in the margins).
- * .cm-content keeps only the 1px side rules as the page edges. */
+/* Paint the entire CodeMirror surface. The editor theme is transparent
+ * by design so consumers can own their shell; the demo deliberately
+ * opts into an opaque canvas with no decorative background bleed. */
+.demo-editor-pane .atomic-cm-editor,
+.demo-editor-pane .cm-editor,
 .demo-editor-pane .cm-scroller {
-  position: relative;
+  background: var(--atomic-editor-bg);
 }
 
 .demo-editor-pane .cm-scroller::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  /* Match the reading column EXACTLY. Two gotchas: (1) `ch` resolves
-   * against THIS element's font, and the editor renders .cm-scroller at
-   * the theme base size while .cm-content is one step larger — so pin
-   * the same font-size or the stripe computes narrower. (2) .cm-content
-   * is box-sizing:border-box, so its `max-width: measure` already
-   * includes the padding — match `measure` with no extra, or the stripe
-   * overshoots into the margins. */
-  font-size: var(--atomic-editor-body-size, 1.0625rem);
-  width: min(var(--atomic-editor-measure, 70ch), 100%);
-  background: var(--atomic-editor-bg);
-  z-index: -3;
-  pointer-events: none;
+  content: none;
 }
 
-.demo-editor-pane .cm-content,
+.demo-editor-pane .cm-content {
+  padding-inline: clamp(1.25rem, 4vw, 3.75rem);
+}
+
 .demo-editor-pane .cm-panels {
-  border-inline: 1px solid var(--atomic-editor-border);
+  border-bottom: 1px solid var(--atomic-editor-border);
 }
 
 /* ---- raw-source split pane ---------------------------------------- */
 
 .demo-source-pane {
-  flex: 1 1 0;
+  flex: 2 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--atomic-editor-border);
+  border-radius: 0.875rem;
   background: var(--atomic-editor-bg-panel);
+  box-shadow: var(--demo-editor-shadow);
+  overflow: hidden;
 }
 
 .demo-source-head {
@@ -517,9 +509,10 @@ a.demo-pill:hover {
 .demo-chip:focus-visible,
 .demo-segmented button:focus-visible,
 a.demo-pill:focus-visible,
-.demo-github:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--atomic-editor-accent);
+.demo-github:focus-visible,
+.demo-icon-btn:focus-visible {
+  outline: 2px solid var(--demo-focus-ring);
+  outline-offset: 2px;
   border-radius: var(--atomic-editor-radius);
 }
 
@@ -566,15 +559,79 @@ a.demo-pill:focus-visible,
     padding-left: 1rem;
     padding-right: 1rem;
   }
+  .demo-toolbar,
+  .demo-control,
+  .demo-actions,
+  .demo-spotlight {
+    min-width: 0;
+  }
+  .demo-control {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+  }
+  .demo-segmented {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+  }
+  .demo-segmented button {
+    min-width: 0;
+    padding-inline: 0.35rem;
+  }
+  .demo-meta {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .demo-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .demo-perf {
+    flex-basis: 100%;
+    padding-left: 0;
+  }
+  .demo-spotlight-hint {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
   .demo-sub {
     display: none;
   }
   .demo-canvas {
     flex-direction: column;
+    padding: 0;
+    gap: 0;
+  }
+  .demo-editor-pane,
+  .demo-source-pane {
+    border-radius: 0;
+    box-shadow: none;
   }
   .demo-source-pane {
-    border-left: none;
     border-top: 1px solid var(--atomic-editor-border);
     max-height: 42%;
+  }
+}
+
+@media (max-width: 480px) {
+  .demo-topbar {
+    padding-inline: 1rem;
+  }
+  .demo-github {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .demo-icon-btn,
+  .demo-btn,
+  .demo-chip,
+  .demo-segmented button {
+    min-height: 2.75rem;
   }
 }
