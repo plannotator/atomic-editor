@@ -23,6 +23,11 @@ changes as the public surface stabilizes.
   stays rendered; changed atomic ranges expose source so review evidence cannot
   be hidden by a replacement widget.
 
+### Fixed
+
+- The dedicated diff-overview column now preserves CodeMirror's bounded inner
+  scroller instead of expanding the grid row to the document's full height.
+
 ## [0.7.0]
 
 ### Changed

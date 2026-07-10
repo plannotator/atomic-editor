@@ -167,11 +167,15 @@
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  /* Grid's default auto row honors the editor's max-content height, which
+   * expands the host and leaves CodeMirror's inner scroller with no overflow. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
 
 .cm-atomic-diff-editor-host {
   height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
