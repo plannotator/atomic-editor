@@ -74,7 +74,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 3rem;
+  min-height: 3.25rem;
   padding: 0.45rem 0.75rem;
   border-bottom: 1px solid var(--atomic-editor-border, #3d3d3d);
   background: color-mix(
@@ -113,7 +113,7 @@
 }
 
 .cm-atomic-diff-button {
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -166,8 +166,102 @@
   min-height: 0;
 }
 
-.cm-atomic-diff-surface > .cm-editor {
+.cm-atomic-diff-editor-host {
   height: 100%;
+}
+
+.cm-atomic-diff-editor-host > .cm-editor {
+  height: 100%;
+}
+
+.cm-atomic-diff-overview {
+  position: absolute;
+  z-index: 2;
+  top: 0.5rem;
+  right: 0;
+  bottom: 0.5rem;
+  width: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--atomic-editor-radius, 6px);
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.cm-atomic-diff-overview:focus-visible {
+  outline: none;
+}
+
+.cm-atomic-diff-overview:focus-visible .cm-atomic-diff-overview-track {
+  box-shadow:
+    inset 0 0 0 1px var(--atomic-editor-border, #3d3d3d),
+    0 0 0 2px var(--atomic-editor-fg, #dcddde);
+}
+
+.cm-atomic-diff-overview-track {
+  position: absolute;
+  top: 0;
+  right: 0.45rem;
+  bottom: 0;
+  width: 0.34rem;
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--atomic-editor-fg-faint, #666) 20%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 1px color-mix(
+    in srgb,
+    var(--atomic-editor-border, #3d3d3d) 72%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.cm-atomic-diff-overview-marker {
+  position: absolute;
+  right: 0;
+  width: 100%;
+  min-height: 3px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: var(--atomic-editor-diff-insert);
+  pointer-events: none;
+}
+
+.cm-atomic-diff-overview-marker.deletion {
+  background: var(--atomic-editor-diff-delete);
+}
+
+.cm-atomic-diff-overview-marker.replacement {
+  background: linear-gradient(
+    to bottom,
+    var(--atomic-editor-diff-delete) 0 50%,
+    var(--atomic-editor-diff-insert) 50% 100%
+  );
+}
+
+.cm-atomic-diff-overview-marker.active {
+  right: -0.14rem;
+  width: 0.62rem;
+  box-shadow: 0 0 0 1px var(--atomic-editor-bg, #1e1e1e);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cm-atomic-diff-overview:hover .cm-atomic-diff-overview-track {
+    background: color-mix(
+      in srgb,
+      var(--atomic-editor-fg-faint, #666) 32%,
+      transparent
+    );
+  }
+}
+
+@media (max-width: 640px) {
+  .cm-atomic-diff-overview {
+    display: none;
+  }
 }
 
 .atomic-cm-diff-editor .cm-content {
@@ -251,45 +345,6 @@
   text-decoration-color: var(--atomic-editor-diff-delete);
   text-decoration-thickness: 1.5px;
 }
-
-.atomic-cm-diff-editor .cm-collapsedLines {
-  box-sizing: border-box;
-  width: min(100%, var(--atomic-editor-measure, 70ch));
-  margin: 0.4rem auto;
-  padding: 0.55rem 0.75rem;
-  border: 1px dashed var(--atomic-editor-border, #3d3d3d);
-  border-radius: var(--atomic-editor-radius, 6px);
-  background: color-mix(
-    in srgb,
-    var(--atomic-editor-bg-surface, #2d2d2d) 72%,
-    transparent
-  ) !important;
-  color: var(--atomic-editor-fg-muted, #888) !important;
-  font-family: var(--atomic-editor-font, system-ui, sans-serif);
-  font-size: 0.75rem;
-  text-align: center;
-  cursor: pointer;
-}
-
-.atomic-cm-diff-editor .cm-collapsedLines::before,
-.atomic-cm-diff-editor .cm-collapsedLines::after {
-  content: "";
-}
-
-.atomic-cm-diff-editor .cm-collapsedLines:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--atomic-editor-accent, #7c3aed) 58%,
-    var(--atomic-editor-border, #3d3d3d)
-  );
-  color: var(--atomic-editor-fg, #dcddde) !important;
-}
-
-.atomic-cm-diff-editor .cm-collapsedLines:focus-visible {
-  outline: 2px solid var(--atomic-editor-accent-bright, #a78bfa);
-  outline-offset: 2px;
-}
-
 .atomic-cm-diff-editor .cm-atomic-task-checkbox:disabled {
   cursor: default;
   opacity: 1;

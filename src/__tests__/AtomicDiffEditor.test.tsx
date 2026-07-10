@@ -61,7 +61,6 @@ describe('AtomicDiffEditor', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: 'The quick brown fox.',
       modifiedMarkdown: 'The quick agile fox.',
-      collapseUnchanged: false,
     });
 
     expect(handleRef.current?.getChangeCount()).toBe(1);
@@ -74,7 +73,6 @@ describe('AtomicDiffEditor', () => {
     const { host } = mountDiff({
       originalMarkdown: '# Earlier heading\n\n- [ ] Task',
       modifiedMarkdown: '# New heading\n\n- [x] Task',
-      collapseUnchanged: false,
     });
 
     const heading = host.querySelector<HTMLElement>('.cm-atomic-h1');
@@ -120,7 +118,6 @@ describe('AtomicDiffEditor', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: original,
       modifiedMarkdown: modified,
-      collapseUnchanged: false,
     });
 
     const tables = host.querySelectorAll<HTMLElement>('.cm-atomic-table');
@@ -144,7 +141,6 @@ describe('AtomicDiffEditor', () => {
     const { host } = mountDiff({
       originalMarkdown: original,
       modifiedMarkdown: original.replace('Earlier', 'Current'),
-      collapseUnchanged: false,
       onLinkClick: (url) => openedUrls.push(url),
     });
 
@@ -165,7 +161,6 @@ describe('AtomicDiffEditor', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: original,
       modifiedMarkdown: modified,
-      collapseUnchanged: false,
     });
 
     const renderedImages = host.querySelectorAll<HTMLElement>('.cm-atomic-image');
@@ -181,7 +176,6 @@ describe('AtomicDiffEditor', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: original,
       modifiedMarkdown: modified,
-      collapseUnchanged: false,
       extensions: [wikiLinks()],
     });
 
@@ -198,7 +192,6 @@ describe('AtomicDiffEditor', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: modified.replace('Current', 'Earlier'),
       modifiedMarkdown: modified,
-      collapseUnchanged: false,
       extensions: [
         wikiLinks({
           preferResolvedLabel: true,
@@ -227,7 +220,6 @@ describe('AtomicDiffEditor', () => {
     const { host } = mountDiff({
       originalMarkdown: original,
       modifiedMarkdown: original.replace('Earlier', 'Current'),
-      collapseUnchanged: false,
     });
 
     const properties = host.querySelector<HTMLElement>('.cm-atomic-fm');
@@ -250,7 +242,6 @@ describe('AtomicDiffEditor', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: original,
       modifiedMarkdown: modified,
-      collapseUnchanged: false,
     });
 
     expect(host.querySelector('.cm-atomic-fm')).toBeNull();
@@ -258,40 +249,66 @@ describe('AtomicDiffEditor', () => {
     expect(handleRef.current?.getMarkdown()).toBe(modified);
   });
 
-  it('makes unchanged-region collapse controls keyboard accessible', async () => {
+  it('keeps the complete document visible without collapsed regions', () => {
     const originalLines = Array.from({ length: 32 }, (_, index) => `Line ${index + 1}`);
     const modifiedLines = [...originalLines];
     modifiedLines[15] = 'Line 16 changed';
     const { host, handleRef } = mountDiff({
       originalMarkdown: originalLines.join('\n'),
       modifiedMarkdown: modifiedLines.join('\n'),
-      collapseUnchanged: { margin: 2, minSize: 6 },
     });
 
-    await act(async () => Promise.resolve());
+    expect(host.querySelector('.cm-collapsedLines')).toBeNull();
+    expect(host.querySelector('.cm-content')?.textContent).toContain('Line 1');
+    expect(host.querySelector('.cm-content')?.textContent).toContain('Line 32');
+    expect(handleRef.current?.getMarkdown()).toBe(modifiedLines.join('\n'));
+  });
 
-    const collapsed = host.querySelector<HTMLElement>('.cm-collapsedLines');
-    expect(collapsed).not.toBeNull();
-    expect(collapsed?.getAttribute('role')).toBe('button');
-    expect(collapsed?.tabIndex).toBe(0);
-    expect(collapsed?.getAttribute('aria-label')).toMatch(/^Expand \d+ unchanged lines$/);
+  it('maps every change into a keyboard-traversable overview rail', () => {
+    const originalLines = Array.from({ length: 40 }, (_, index) => `Stable line ${index + 1}`);
+    const modifiedLines = [...originalLines];
+    modifiedLines.splice(5, 0, 'Added line');
+    modifiedLines.splice(modifiedLines.indexOf('Stable line 18'), 1);
+    modifiedLines[modifiedLines.indexOf('Stable line 30')] = 'Changed line 30';
+
+    const { host, handleRef } = mountDiff({
+      originalMarkdown: originalLines.join('\n'),
+      modifiedMarkdown: modifiedLines.join('\n'),
+    });
+
+    const overview = host.querySelector<HTMLButtonElement>('.cm-atomic-diff-overview');
+    const markers = host.querySelectorAll('.cm-atomic-diff-overview-marker');
+    expect(overview?.getAttribute('aria-label')).toContain('3 changes');
+    expect(markers).toHaveLength(handleRef.current?.getChangeCount() ?? 0);
+    expect(host.querySelector('.cm-atomic-diff-overview-marker.addition')).not.toBeNull();
+    expect(host.querySelector('.cm-atomic-diff-overview-marker.deletion')).not.toBeNull();
+    expect(host.querySelector('.cm-atomic-diff-overview-marker.replacement')).not.toBeNull();
 
     act(() => {
-      collapsed?.dispatchEvent(new KeyboardEvent('keydown', {
+      overview?.dispatchEvent(new KeyboardEvent('keydown', {
         bubbles: true,
         cancelable: true,
-        key: 'Enter',
+        key: 'ArrowDown',
       }));
     });
 
-    expect(handleRef.current?.getMarkdown()).toBe(modifiedLines.join('\n'));
+    expect(host.querySelector('.cm-atomic-diff-status')?.textContent).toContain('Change 1 of 3');
+  });
+
+  it('lets hosts hide the built-in overview rail', () => {
+    const { host } = mountDiff({
+      originalMarkdown: 'Before',
+      modifiedMarkdown: 'After',
+      showOverview: false,
+    });
+
+    expect(host.querySelector('.cm-atomic-diff-overview')).toBeNull();
   });
 
   it('navigates changed regions through the public handle', () => {
     const { host, handleRef } = mountDiff({
       originalMarkdown: 'Alpha\n\nBeta\n\nGamma',
       modifiedMarkdown: 'Alpha changed\n\nBeta\n\nGamma changed',
-      collapseUnchanged: false,
     });
 
     expect(handleRef.current?.getChangeCount()).toBe(2);

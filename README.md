@@ -107,7 +107,6 @@ import '@atomic-editor/editor/styles.css';
 <AtomicDiffEditor
   originalMarkdown={savedRevision}
   modifiedMarkdown={currentRevision}
-  collapseUnchanged={{ margin: 3, minSize: 8 }}
   extensions={[
     wikiLinks({
       resolve: (target) => store.resolve(target),
@@ -123,11 +122,15 @@ tasks, and wiki links keep their rich reader rendering. When a change
 intersects one of those atomic ranges, its source is shown so the diff cannot
 disappear behind a replacement widget.
 
+The entire newer document remains visible, including every unchanged line.
+The overview rail on the right maps additions, deletions, and replacements
+across the file and jumps to the nearest change when clicked. It also supports
+arrow-key navigation when focused.
+
 Useful options:
 
-- `collapseUnchanged={false | { margin, minSize }}` — enabled by default with
-  three context lines and an eight-line collapse threshold.
 - `allowInlineDiffs`, `highlightChanges`, and `gutter` — all default to `true`.
+- `showOverview={false}` — hide the clickable change overview rail.
 - `diffConfig={{ scanLimit, timeout }}` — override the bounded large-document
   diff policy when a host has different latency/precision needs.
 - `showToolbar={false}` — hide the built-in count and previous/next navigation

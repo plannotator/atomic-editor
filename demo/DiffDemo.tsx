@@ -64,11 +64,11 @@ The table below is unchanged, so it remains rendered as a useful control.
 Changed and unchanged atomic blocks therefore remain distinguishable.
 No document text is rewritten to produce either presentation.
 
-## 6. Collapsed unchanged context
+## 6. Full document context
 
-Context mode: Show every stable line.
+Review mode: Collapse long unchanged regions.
 
-The “N unchanged lines” control is not a diff. It expands a long run of stable lines on demand.
+The early-release editor keeps every unchanged line visible. Nothing is hidden by a context heuristic.
 
 Stable context line 01 — unchanged material remains available.
 Stable context line 02 — unchanged material remains available.
@@ -148,11 +148,11 @@ The table below is unchanged, so it remains rendered as a useful control.
 Changed and unchanged atomic blocks therefore remain distinguishable.
 No document text is rewritten to produce either presentation.
 
-## 6. Collapsed unchanged context
+## 6. Full document context
 
-Context mode: Collapse long runs of stable lines.
+Review mode: Show the complete document.
 
-The “N unchanged lines” control is not a diff. It expands a long run of stable lines on demand.
+The early-release editor keeps every unchanged line visible. Nothing is hidden by a context heuristic.
 
 Stable context line 01 — unchanged material remains available.
 Stable context line 02 — unchanged material remains available.
@@ -174,7 +174,6 @@ Stable context line 16 — unchanged material remains available.`;
 /** Focused browser harness for the frozen inline-diff spike. */
 export function DiffDemo() {
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -203,14 +202,6 @@ export function DiffDemo() {
             </span>
             <button
               type="button"
-              className={`demo-btn${expanded ? ' active' : ''}`}
-              aria-pressed={expanded}
-              onClick={() => setExpanded((value) => !value)}
-            >
-              {expanded ? 'Collapse context' : 'Expand context'}
-            </button>
-            <button
-              type="button"
               className="demo-icon-btn"
               onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')}
               aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
@@ -221,7 +212,7 @@ export function DiffDemo() {
         </div>
         <p className="diff-demo-description">
           Six isolated examples explain one behavior at a time. Start at example 1 or use Next to
-          step through additions, removals, replacements, atomic blocks, and collapsed context.
+          step through additions, removals, replacements, atomic blocks, and full-document context.
         </p>
         <div className="diff-demo-key" aria-label="How to read the diff">
           <span className="diff-demo-key-label">Reading key</span>
@@ -246,8 +237,7 @@ export function DiffDemo() {
           <AtomicDiffEditor
             originalMarkdown={ORIGINAL_MARKDOWN}
             modifiedMarkdown={MODIFIED_MARKDOWN}
-            documentId={`inline-diff-spike-${expanded ? 'expanded' : 'collapsed'}`}
-            collapseUnchanged={expanded ? false : { margin: 5, minSize: 10 }}
+            documentId="inline-diff-spike-full-context"
           />
         </div>
       </main>

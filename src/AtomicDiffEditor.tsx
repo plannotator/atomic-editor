@@ -1,15 +1,22 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type MutableRefObject,
+} from 'react';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { type LanguageDescription } from '@codemirror/language';
 import {
   getChunks,
   unifiedMergeView,
+  type Chunk,
   type DiffConfig,
 } from '@codemirror/merge';
 import { EditorState, type Extension, type Transaction } from '@codemirror/state';
 import {
   EditorView,
-  ViewPlugin,
   highlightSpecialChars,
 } from '@codemirror/view';
 
@@ -23,21 +30,18 @@ import { tables } from './table-widget';
 
 const EMPTY_CODE_LANGUAGES: readonly LanguageDescription[] = [];
 const EMPTY_EXTENSIONS: readonly Extension[] = [];
-const DEFAULT_COLLAPSE_UNCHANGED: AtomicDiffCollapseOptions = {
-  margin: 3,
-  minSize: 8,
-};
 const DEFAULT_DIFF_CONFIG: DiffConfig = {
   scanLimit: 500_000,
   timeout: 1_000,
 };
 
-/** Controls how much context remains around collapsed unchanged regions. */
-export interface AtomicDiffCollapseOptions {
-  /** Lines of context retained on each side of a change. Defaults to 3. */
-  readonly margin?: number;
-  /** Minimum unchanged line count eligible for collapse. Defaults to 8. */
-  readonly minSize?: number;
+type DiffOverviewMarkerKind = 'addition' | 'deletion' | 'replacement';
+
+interface DiffOverviewMarker {
+  readonly index: number;
+  readonly kind: DiffOverviewMarkerKind;
+  readonly position: number;
+  readonly size: number;
 }
 
 /** Imperative navigation and inspection surface for a frozen diff editor. */
@@ -72,6 +76,8 @@ export interface AtomicDiffEditorProps {
   readonly ariaLabel?: string;
   /** Whether to show the built-in change count and navigation. Defaults to true. */
   readonly showToolbar?: boolean;
+  /** Whether to show the clickable change overview rail. Defaults to true. */
+  readonly showOverview?: boolean;
   /** Whether to show the change gutter. Defaults to true. */
   readonly gutter?: boolean;
   /** Whether small edits render deletions inline. Defaults to true. */
@@ -80,11 +86,6 @@ export interface AtomicDiffEditorProps {
   readonly highlightChanges?: boolean;
   /** Whether deleted fragments receive Markdown syntax highlighting. Defaults to true. */
   readonly syntaxHighlightDeletions?: boolean;
-  /**
-   * Collapse long unchanged regions by default. Pass false to keep the entire
-   * document expanded, or provide context thresholds.
-   */
-  readonly collapseUnchanged?: false | AtomicDiffCollapseOptions;
   /** Diff-algorithm safeguards for large or highly divergent documents. */
   readonly diffConfig?: DiffConfig;
   /** Grammars to use in fenced code blocks. */
@@ -112,11 +113,11 @@ export function AtomicDiffEditor({
   documentId,
   ariaLabel = 'Document changes',
   showToolbar = true,
+  showOverview = true,
   gutter = true,
   allowInlineDiffs = true,
   highlightChanges = true,
   syntaxHighlightDeletions = true,
-  collapseUnchanged = DEFAULT_COLLAPSE_UNCHANGED,
   diffConfig = DEFAULT_DIFF_CONFIG,
   codeLanguages = EMPTY_CODE_LANGUAGES,
   extensions = EMPTY_EXTENSIONS,
@@ -129,6 +130,7 @@ export function AtomicDiffEditor({
   const onLinkClickRef = useRef(onLinkClick);
   const [changeCount, setChangeCount] = useState(0);
   const [activeChange, setActiveChange] = useState<number | null>(null);
+  const [overviewMarkers, setOverviewMarkers] = useState<readonly DiffOverviewMarker[]>([]);
 
   useEffect(() => {
     onLinkClickRef.current = onLinkClick;
@@ -138,7 +140,6 @@ export function AtomicDiffEditor({
     const root = editorRootRef.current;
     if (!root) return;
 
-    const collapseConfig = collapseUnchanged === false ? undefined : collapseUnchanged;
     const view = new EditorView({
       parent: root,
       dispatchTransactions: rejectDocumentChanges,
@@ -165,7 +166,6 @@ export function AtomicDiffEditor({
           unifiedMergeView({
             original: originalMarkdown,
             allowInlineDiffs,
-            collapseUnchanged: collapseConfig,
             diffConfig,
             gutter,
             highlightChanges,
@@ -181,7 +181,6 @@ export function AtomicDiffEditor({
           inlinePreview({
             onLinkClick: (url) => onLinkClickRef.current?.(url),
           }),
-          accessibleCollapsedRegions,
           EditorView.updateListener.of((update) => {
             if (!update.selectionSet) return;
             const nextActiveChange = findActiveChange(update.state);
@@ -193,7 +192,9 @@ export function AtomicDiffEditor({
       }),
     });
     viewRef.current = view;
-    setChangeCount(getChunks(view.state)?.chunks.length ?? 0);
+    const chunks = getChunks(view.state)?.chunks ?? [];
+    setChangeCount(chunks.length);
+    setOverviewMarkers(createOverviewMarkers(chunks, view.state.doc.length));
     activeChangeRef.current = null;
     setActiveChange(null);
 
@@ -264,7 +265,17 @@ export function AtomicDiffEditor({
           </div>
         </div>
       )}
-      <div ref={editorRootRef} className="cm-atomic-diff-surface" />
+      <div className="cm-atomic-diff-surface">
+        <div ref={editorRootRef} className="cm-atomic-diff-editor-host" />
+        {showOverview && overviewMarkers.length > 0 && (
+          <DiffOverview
+            markers={overviewMarkers}
+            activeChange={activeChange}
+            viewRef={viewRef}
+            activeChangeRef={activeChangeRef}
+          />
+        )}
+      </div>
     </section>
   );
 }
@@ -292,10 +303,19 @@ function navigateChange(
     : direction === 'next'
       ? (current + 1) % chunks.length
       : (current - 1 + chunks.length) % chunks.length;
-  const chunk = chunks[nextIndex];
+  return navigateChangeAtIndex(view, nextIndex, activeChangeRef);
+}
+
+function navigateChangeAtIndex(
+  view: EditorView | null,
+  index: number,
+  activeChangeRef: MutableRefObject<number | null>,
+): boolean {
+  if (!view) return false;
+  const chunk = getChunks(view.state)?.chunks[index];
   if (!chunk) return false;
 
-  activeChangeRef.current = nextIndex;
+  activeChangeRef.current = index;
   view.dispatch({
     selection: { anchor: Math.min(chunk.fromB, view.state.doc.length) },
     effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' }),
@@ -326,33 +346,101 @@ function DiffArrow({ direction }: { readonly direction: 'next' | 'previous' }) {
   );
 }
 
-const accessibleCollapsedRegions = ViewPlugin.fromClass(
-  class {
-    private readonly observer: MutationObserver;
+function createOverviewMarkers(
+  chunks: readonly Chunk[],
+  documentLength: number,
+): readonly DiffOverviewMarker[] {
+  const length = Math.max(documentLength, 1);
+  return chunks.map((chunk, index) => ({
+    index,
+    kind: getOverviewMarkerKind(chunk),
+    position: clampOverviewPosition(chunk.fromB / length),
+    size: Math.min(
+      Math.max((Math.max(chunk.endB - chunk.fromB, 1) / length) * 100, 0.45),
+      100,
+    ),
+  }));
+}
 
-    constructor(view: EditorView) {
-      this.observer = new MutationObserver(() => patchCollapsedRegions(view));
-      this.observer.observe(view.dom, { childList: true, subtree: true });
-      patchCollapsedRegions(view);
+function getOverviewMarkerKind(chunk: Chunk): DiffOverviewMarkerKind {
+  if (chunk.fromA === chunk.toA) return 'addition';
+  if (chunk.fromB === chunk.toB) return 'deletion';
+  return 'replacement';
+}
+
+function clampOverviewPosition(position: number): number {
+  return Math.min(Math.max(position * 100, 0.6), 99.4);
+}
+
+interface DiffOverviewProps {
+  readonly markers: readonly DiffOverviewMarker[];
+  readonly activeChange: number | null;
+  readonly viewRef: MutableRefObject<EditorView | null>;
+  readonly activeChangeRef: MutableRefObject<number | null>;
+}
+
+function DiffOverview({
+  markers,
+  activeChange,
+  viewRef,
+  activeChangeRef,
+}: DiffOverviewProps) {
+  const changeCount = markers.length;
+
+  const navigateFromPointer = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (event.detail === 0) {
+      navigateChange(viewRef.current, 'next', activeChangeRef);
+      return;
     }
 
-    destroy(): void {
-      this.observer.disconnect();
-    }
-  },
-);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.height <= 0) return;
+    const pointerPosition = ((event.clientY - bounds.top) / bounds.height) * 100;
+    const nearestMarker = markers.reduce((nearest, marker) => (
+      Math.abs(marker.position - pointerPosition) < Math.abs(nearest.position - pointerPosition)
+        ? marker
+        : nearest
+    ));
+    navigateChangeAtIndex(viewRef.current, nearestMarker.index, activeChangeRef);
+  };
 
-function patchCollapsedRegions(view: EditorView): void {
-  for (const element of view.dom.querySelectorAll<HTMLElement>('.cm-collapsedLines')) {
-    if (element.dataset.atomicAccessible === 'true') continue;
-    element.dataset.atomicAccessible = 'true';
-    element.role = 'button';
-    element.tabIndex = 0;
-    element.setAttribute('aria-label', `Expand ${element.textContent ?? 'unchanged lines'}`);
-    element.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
+  const navigateFromKeyboard = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const direction = getOverviewKeyboardDirection(event.key);
+    if (direction) {
       event.preventDefault();
-      element.click();
-    });
-  }
+      navigateChange(viewRef.current, direction, activeChangeRef);
+      return;
+    }
+    if (event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const index = event.key === 'Home' ? 0 : changeCount - 1;
+    navigateChangeAtIndex(viewRef.current, index, activeChangeRef);
+  };
+
+  return (
+    <button
+      type="button"
+      className="cm-atomic-diff-overview"
+      aria-label={`Diff overview: ${formatChangeCount(changeCount)}. Press Enter for next change; arrow keys navigate.`}
+      title="Diff overview"
+      onClick={navigateFromPointer}
+      onKeyDown={navigateFromKeyboard}
+    >
+      <span className="cm-atomic-diff-overview-track" aria-hidden="true">
+        {markers.map((marker) => (
+          <span
+            key={marker.index}
+            className={`cm-atomic-diff-overview-marker ${marker.kind}${activeChange === marker.index ? ' active' : ''}`}
+            style={{ top: `${marker.position}%`, height: `${marker.size}%` }}
+          />
+        ))}
+      </span>
+    </button>
+  );
+}
+
+function getOverviewKeyboardDirection(key: string): 'next' | 'previous' | null {
+  if (key === 'ArrowDown' || key === 'ArrowRight') return 'next';
+  if (key === 'ArrowUp' || key === 'ArrowLeft') return 'previous';
+  return null;
 }

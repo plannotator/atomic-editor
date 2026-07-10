@@ -705,11 +705,6 @@ a.demo-pill:hover {
   padding-inline: max(0.75rem, calc((100% - 74ch) / 2));
 }
 
-.diff-demo-editor-pane .cm-collapsedLines {
-  font-family: var(--lab-mono);
-  letter-spacing: 0.01em;
-}
-
 /* ---- focus + motion ----------------------------------------------- */
 
 .demo-btn:focus-visible,

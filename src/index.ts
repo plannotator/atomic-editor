@@ -5,7 +5,6 @@ export type {
 } from './AtomicCodeMirrorEditor';
 export { AtomicDiffEditor } from './AtomicDiffEditor';
 export type {
-  AtomicDiffCollapseOptions,
   AtomicDiffEditorHandle,
   AtomicDiffEditorProps,
 } from './AtomicDiffEditor';
