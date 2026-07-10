@@ -31,6 +31,297 @@
   width: 100%;
 }
 
+/* Frozen unified diff ---------------------------------------------------
+ *
+ * The diff surface intentionally keeps the editor's reading typography.
+ * Color supports the meaning, but never carries it alone: insertions have a
+ * solid gutter rail and emphasis wash; deletions use a struck-through `del`
+ * projection at their original position. */
+.atomic-cm-diff-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  --atomic-editor-diff-insert: #34d399;
+  --atomic-editor-diff-delete: #fb7185;
+  --atomic-editor-diff-insert-bg: color-mix(
+    in srgb,
+    var(--atomic-editor-diff-insert) 6%,
+    transparent
+  );
+  --atomic-editor-diff-insert-strong-bg: color-mix(
+    in srgb,
+    var(--atomic-editor-diff-insert) 24%,
+    transparent
+  );
+  --atomic-editor-diff-delete-bg: color-mix(
+    in srgb,
+    var(--atomic-editor-diff-delete) 12%,
+    transparent
+  );
+  --atomic-editor-diff-delete-strong-bg: color-mix(
+    in srgb,
+    var(--atomic-editor-diff-delete) 22%,
+    transparent
+  );
+}
+
+.cm-atomic-diff-toolbar {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3rem;
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--atomic-editor-border, #3d3d3d);
+  background: color-mix(
+    in srgb,
+    var(--atomic-editor-bg-panel, #252525) 94%,
+    transparent
+  );
+  color: var(--atomic-editor-fg, #dcddde);
+  font-family: var(--atomic-editor-font, system-ui, sans-serif);
+}
+
+.cm-atomic-diff-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--atomic-editor-fg-muted, #888);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cm-atomic-diff-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--atomic-editor-diff-insert);
+  box-shadow: 0 0 0 3px var(--atomic-editor-diff-insert-bg);
+}
+
+.cm-atomic-diff-navigation {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--atomic-editor-border, #3d3d3d);
+  border-radius: var(--atomic-editor-radius, 6px);
+  background: var(--atomic-editor-bg, #1e1e1e);
+}
+
+.cm-atomic-diff-button {
+  min-height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border: 0;
+  border-right: 1px solid var(--atomic-editor-border, #3d3d3d);
+  background: transparent;
+  color: var(--atomic-editor-fg-muted, #888);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cm-atomic-diff-button:last-child {
+  border-right: 0;
+}
+
+.cm-atomic-diff-button:hover:not(:disabled) {
+  background: var(--atomic-editor-diff-insert-bg);
+  color: var(--atomic-editor-fg, #dcddde);
+}
+
+.cm-atomic-diff-button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--atomic-editor-accent-bright, #a78bfa);
+  outline-offset: -2px;
+}
+
+.cm-atomic-diff-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.cm-atomic-diff-button svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cm-atomic-diff-surface {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cm-atomic-diff-surface > .cm-editor {
+  height: 100%;
+}
+
+.atomic-cm-diff-editor .cm-content {
+  padding-bottom: 6rem;
+}
+
+.atomic-cm-diff-editor .cm-gutters {
+  display: none;
+  border: 0;
+  background: transparent;
+}
+
+.atomic-cm-diff-editor .cm-changeGutter {
+  width: 0.35rem;
+  padding-left: 0;
+  margin-right: 0.5rem;
+}
+
+.atomic-cm-diff-editor .cm-changedLineGutter,
+.atomic-cm-diff-editor .cm-inlineChangedLineGutter {
+  width: 0.2rem;
+  margin-left: 0.08rem;
+  border-radius: 999px;
+  background: var(--atomic-editor-diff-insert);
+}
+
+.atomic-cm-diff-editor .cm-deletedLineGutter {
+  width: 0.2rem;
+  margin-left: 0.08rem;
+  border-radius: 999px;
+  background: var(--atomic-editor-diff-delete);
+}
+
+.atomic-cm-diff-gutter .cm-changedLine,
+.atomic-cm-diff-gutter .cm-inlineChangedLine {
+  box-shadow: inset 0.18rem 0 0 var(--atomic-editor-diff-insert);
+}
+
+.atomic-cm-diff-editor.cm-merge-b .cm-changedLine,
+.atomic-cm-diff-editor.cm-merge-b .cm-inlineChangedLine,
+.atomic-cm-diff-editor .cm-merge-b .cm-changedLine,
+.atomic-cm-diff-editor .cm-merge-b .cm-inlineChangedLine {
+  background: var(--atomic-editor-diff-insert-bg);
+}
+
+.atomic-cm-diff-editor .cm-changedText {
+  border-radius: 0.18rem;
+  background: var(--atomic-editor-diff-insert-strong-bg) !important;
+  box-shadow: inset 0 -1px 0 var(--atomic-editor-diff-insert);
+}
+
+.atomic-cm-diff-editor .cm-insertedLine {
+  text-decoration: none;
+}
+
+.atomic-cm-diff-editor .cm-deletedChunk {
+  position: relative;
+  margin-block: 0.18rem;
+  padding: 0.12rem 0.5rem 0.12rem 0.75rem;
+  border-left: 0.2rem solid var(--atomic-editor-diff-delete);
+  background: var(--atomic-editor-diff-delete-bg);
+  color: color-mix(
+    in srgb,
+    var(--atomic-editor-fg-muted, #888) 88%,
+    var(--atomic-editor-diff-delete) 12%
+  );
+}
+
+.atomic-cm-diff-editor .cm-deletedChunk .cm-deletedText,
+.atomic-cm-diff-editor .cm-deletedText {
+  border-radius: 0.18rem;
+  background: var(--atomic-editor-diff-delete-strong-bg) !important;
+  color: inherit;
+  text-decoration: line-through;
+  text-decoration-color: var(--atomic-editor-diff-delete);
+  text-decoration-thickness: 1.5px;
+}
+
+.atomic-cm-diff-editor .cm-collapsedLines {
+  box-sizing: border-box;
+  width: min(100%, var(--atomic-editor-measure, 70ch));
+  margin: 0.4rem auto;
+  padding: 0.55rem 0.75rem;
+  border: 1px dashed var(--atomic-editor-border, #3d3d3d);
+  border-radius: var(--atomic-editor-radius, 6px);
+  background: color-mix(
+    in srgb,
+    var(--atomic-editor-bg-surface, #2d2d2d) 72%,
+    transparent
+  ) !important;
+  color: var(--atomic-editor-fg-muted, #888) !important;
+  font-family: var(--atomic-editor-font, system-ui, sans-serif);
+  font-size: 0.75rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.atomic-cm-diff-editor .cm-collapsedLines::before,
+.atomic-cm-diff-editor .cm-collapsedLines::after {
+  content: "";
+}
+
+.atomic-cm-diff-editor .cm-collapsedLines:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--atomic-editor-accent, #7c3aed) 58%,
+    var(--atomic-editor-border, #3d3d3d)
+  );
+  color: var(--atomic-editor-fg, #dcddde) !important;
+}
+
+.atomic-cm-diff-editor .cm-collapsedLines:focus-visible {
+  outline: 2px solid var(--atomic-editor-accent-bright, #a78bfa);
+  outline-offset: 2px;
+}
+
+.atomic-cm-diff-editor .cm-atomic-task-checkbox:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.atomic-cm-diff-editor .cm-line.cm-atomic-task-done {
+  text-decoration: none;
+}
+
+.atomic-cm-diff-editor .cm-atomic-table[data-readonly="true"]
+  .cm-atomic-table-cell-source {
+  cursor: default;
+}
+
+@media (max-width: 520px) {
+  .cm-atomic-diff-toolbar {
+    padding-inline: 0.55rem;
+  }
+
+  .cm-atomic-diff-button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding-inline: 0.65rem;
+  }
+
+  .cm-atomic-diff-button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 /* Content container — constrain to a comfortable reading width. This
  * is where the prose feel mostly comes from: line length in the
  * 60–75ch range is what lets the eye sweep naturally. The full editor

@@ -7,6 +7,7 @@ import {
 } from '@atomic-editor/editor';
 import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages';
 import '@atomic-editor/editor/styles.css';
+import { DiffDemo } from './DiffDemo';
 import {
   SAMPLE_SIZES,
   generateSampleMarkdown,
@@ -105,7 +106,13 @@ function togglesToOptions(t: ContentToggles): SampleOptions {
   };
 }
 
+/** Routes the demo to the focused diff harness when `?mode=diff` is present. */
 export function App() {
+  const mode = new URLSearchParams(window.location.search).get('mode');
+  return mode === 'diff' ? <DiffDemo /> : <EditorDemo />;
+}
+
+function EditorDemo() {
   const [sampleSize, setSampleSize] = useState<SampleSize>('1 page');
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [toggles, setToggles] = useState<ContentToggles>(DEFAULT_TOGGLES);

@@ -1,6 +1,7 @@
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension, type Text } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+import { intersectsAtomicDiffChange } from './diff-context';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
 
@@ -115,6 +116,7 @@ class WikiLinkResolverPlugin {
     for (const link of links) {
       if (
         link.label ||
+        intersectsAtomicDiffChange(this.view.state, link.from, link.to) ||
         isSelectionInsideLink(this.view.state, link) ||
         !shouldResolveWikiLink(this.config, link.target) ||
         this.pending.has(link.target) ||
@@ -327,6 +329,7 @@ function buildDecorations(
 
   for (const link of links) {
     if (!isSingleLineRange(state, link.from, link.to)) continue;
+    if (intersectsAtomicDiffChange(state, link.from, link.to)) continue;
 
     if (isSelectionInsideLink(state, link)) {
       builder.add(link.from, link.to, Decoration.mark({ class: 'cm-atomic-wiki-link-active' }));

@@ -12,6 +12,7 @@ import {
   WidgetType,
   type DecorationSet,
 } from '@codemirror/view';
+import { intersectsAtomicDiffChange, isAtomicDiffView } from './diff-context';
 import { treeGrowthEffect, treeProgressPlugin } from './tree-progress';
 
 // Image blocks.
@@ -87,6 +88,11 @@ class ImageWidget extends WidgetType {
     }
     wrap.appendChild(img);
 
+    if (isAtomicDiffView(view.state)) {
+      wrap.dataset.readonly = 'true';
+      return wrap;
+    }
+
     // Clicking the image should land the caret on the source line
     // (where the `![alt](url)` markdown lives) so the reveal happens
     // and the user can edit. CM6's default behavior for block widgets
@@ -151,6 +157,7 @@ function buildImageBlocks(state: EditorState): DecorationSet {
       if (!match) return;
       const [, alt, src] = match;
       if (!src) return;
+      if (intersectsAtomicDiffChange(state, node.from, node.to)) return;
 
       const line = state.doc.lineAt(node.from);
       ranges.push(
