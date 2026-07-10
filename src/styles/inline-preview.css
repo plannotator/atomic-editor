@@ -42,6 +42,8 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  container-name: atomic-diff-editor;
+  container-type: inline-size;
   --atomic-editor-diff-insert: #34d399;
   --atomic-editor-diff-delete: #fb7185;
   --atomic-editor-diff-insert-bg: color-mix(
@@ -163,11 +165,14 @@
 .cm-atomic-diff-surface {
   position: relative;
   flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 0;
 }
 
 .cm-atomic-diff-editor-host {
   height: 100%;
+  min-width: 0;
 }
 
 .cm-atomic-diff-editor-host > .cm-editor {
@@ -175,16 +180,19 @@
 }
 
 .cm-atomic-diff-overview {
-  position: absolute;
-  z-index: 2;
-  top: 0.5rem;
-  right: 0;
-  bottom: 0.5rem;
+  position: relative;
+  align-self: stretch;
   width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0;
   border: 0;
   border-radius: var(--atomic-editor-radius, 6px);
   background: transparent;
+  box-shadow: inset 1px 0 0 color-mix(
+    in srgb,
+    var(--atomic-editor-border, #3d3d3d) 72%,
+    transparent
+  );
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -201,11 +209,12 @@
 
 .cm-atomic-diff-overview-track {
   position: absolute;
-  top: 0;
-  right: 0.45rem;
-  bottom: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 50%;
   width: 0.34rem;
   border-radius: 999px;
+  transform: translateX(-50%);
   background: color-mix(
     in srgb,
     var(--atomic-editor-fg-faint, #666) 20%,
@@ -258,7 +267,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container atomic-diff-editor (max-width: 640px) {
   .cm-atomic-diff-overview {
     display: none;
   }

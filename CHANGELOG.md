@@ -13,7 +13,7 @@ changes as the public surface stabilizes.
 
 - `AtomicDiffEditor`, a frozen unified Markdown review surface backed by
   `@codemirror/merge`: inline insertions/deletions, change navigation, gutter
-  rails, a clickable file-level change overview, full unchanged context,
+  rails, a dedicated line-mapped change overview, full unchanged context,
   large-document diff safeguards, and the existing consumer `extensions` seam.
 
 ### Changed

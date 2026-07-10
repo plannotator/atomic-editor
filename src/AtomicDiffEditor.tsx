@@ -14,7 +14,12 @@ import {
   type Chunk,
   type DiffConfig,
 } from '@codemirror/merge';
-import { EditorState, type Extension, type Transaction } from '@codemirror/state';
+import {
+  EditorState,
+  type Extension,
+  type Text,
+  type Transaction,
+} from '@codemirror/state';
 import {
   EditorView,
   highlightSpecialChars,
@@ -194,7 +199,7 @@ export function AtomicDiffEditor({
     viewRef.current = view;
     const chunks = getChunks(view.state)?.chunks ?? [];
     setChangeCount(chunks.length);
-    setOverviewMarkers(createOverviewMarkers(chunks, view.state.doc.length));
+    setOverviewMarkers(createOverviewMarkers(chunks, view.state.doc));
     activeChangeRef.current = null;
     setActiveChange(null);
 
@@ -348,18 +353,25 @@ function DiffArrow({ direction }: { readonly direction: 'next' | 'previous' }) {
 
 function createOverviewMarkers(
   chunks: readonly Chunk[],
-  documentLength: number,
+  document: Text,
 ): readonly DiffOverviewMarker[] {
-  const length = Math.max(documentLength, 1);
-  return chunks.map((chunk, index) => ({
-    index,
-    kind: getOverviewMarkerKind(chunk),
-    position: clampOverviewPosition(chunk.fromB / length),
-    size: Math.min(
-      Math.max((Math.max(chunk.endB - chunk.fromB, 1) / length) * 100, 0.45),
-      100,
-    ),
-  }));
+  const lineCount = Math.max(document.lines, 1);
+  const lastLineIndex = Math.max(lineCount - 1, 1);
+
+  return chunks.map((chunk, index) => {
+    const startPosition = Math.min(chunk.fromB, document.length);
+    const endPosition = Math.min(chunk.endB, document.length);
+    const startLineIndex = document.lineAt(startPosition).number - 1;
+    const endLineIndex = document.lineAt(endPosition).number - 1;
+    const changedLineCount = Math.max(endLineIndex - startLineIndex + 1, 1);
+
+    return {
+      index,
+      kind: getOverviewMarkerKind(chunk),
+      position: clampOverviewPosition(startLineIndex / lastLineIndex),
+      size: Math.min(Math.max((changedLineCount / lineCount) * 100, 0.45), 100),
+    };
+  });
 }
 
 function getOverviewMarkerKind(chunk: Chunk): DiffOverviewMarkerKind {

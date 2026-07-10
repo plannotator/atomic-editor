@@ -295,6 +295,28 @@ describe('AtomicDiffEditor', () => {
     expect(host.querySelector('.cm-atomic-diff-status')?.textContent).toContain('Change 1 of 3');
   });
 
+  it('positions overview markers by document line rather than character offset', () => {
+    const originalLines = [
+      'x'.repeat(10_000),
+      ...Array.from({ length: 9 }, (_, index) => `Line ${index + 2}`),
+    ];
+    const modifiedLines = [...originalLines];
+    modifiedLines[5] = 'Line 6 changed';
+
+    const { host } = mountDiff({
+      originalMarkdown: originalLines.join('\n'),
+      modifiedMarkdown: modifiedLines.join('\n'),
+    });
+
+    const marker = host.querySelector<HTMLElement>('.cm-atomic-diff-overview-marker');
+    const top = Number.parseFloat(marker?.style.top ?? 'NaN');
+    const height = Number.parseFloat(marker?.style.height ?? 'NaN');
+
+    expect(top).toBeGreaterThan(50);
+    expect(top).toBeLessThan(60);
+    expect(height).toBe(10);
+  });
+
   it('lets hosts hide the built-in overview rail', () => {
     const { host } = mountDiff({
       originalMarkdown: 'Before',
