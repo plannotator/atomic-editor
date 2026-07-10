@@ -18,10 +18,10 @@ changes as the public surface stabilizes.
 
 ### Changed
 
-- Built-in table, image, task, inline-preview, and wiki-link decorations now
-  cooperate with unified diff state. Unchanged atomic content stays rendered;
-  changed atomic ranges expose source so review evidence cannot be hidden by a
-  replacement widget.
+- Built-in frontmatter, table, image, task, inline-preview, and wiki-link
+  decorations now cooperate with unified diff state. Unchanged atomic content
+  stays rendered; changed atomic ranges expose source so review evidence cannot
+  be hidden by a replacement widget.
 
 ## [0.7.0]
 

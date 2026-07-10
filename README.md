@@ -118,10 +118,10 @@ import '@atomic-editor/editor/styles.css';
 ```
 
 The same `extensions` seam used by the editable surface is appended after the
-diff and built-in Markdown decorations. Unchanged tables, images, tasks, and
-wiki links keep their rich reader rendering. When a change intersects one of
-those atomic ranges, its source is shown so the diff cannot disappear behind a
-replacement widget.
+diff and built-in Markdown decorations. Unchanged frontmatter, tables, images,
+tasks, and wiki links keep their rich reader rendering. When a change
+intersects one of those atomic ranges, its source is shown so the diff cannot
+disappear behind a replacement widget.
 
 Useful options:
 

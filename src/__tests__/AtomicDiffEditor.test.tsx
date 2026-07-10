@@ -193,6 +193,71 @@ describe('AtomicDiffEditor', () => {
     expect(host.querySelector('.cm-changedText')?.textContent).toContain('New');
   });
 
+  it('composes preferred resolved labels without rewriting frozen bytes', async () => {
+    const modified = 'Current introduction.\n\nSee [[roadmap|Stored title]].';
+    const { host, handleRef } = mountDiff({
+      originalMarkdown: modified.replace('Current', 'Earlier'),
+      modifiedMarkdown: modified,
+      collapseUnchanged: false,
+      extensions: [
+        wikiLinks({
+          preferResolvedLabel: true,
+          resolve: async (target) => ({ target, label: 'Current roadmap', status: 'resolved' }),
+        }),
+      ],
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host.querySelector('.cm-atomic-wiki-link')?.textContent).toBe('Current roadmap');
+    expect(handleRef.current?.getMarkdown()).toBe(modified);
+  });
+
+  it('keeps unchanged frontmatter rendered as a static properties widget', () => {
+    const original = [
+      '---',
+      'title: Review plan',
+      'tags: [editor, spike]',
+      '---',
+      '',
+      'Earlier body.',
+    ].join('\n');
+    const { host } = mountDiff({
+      originalMarkdown: original,
+      modifiedMarkdown: original.replace('Earlier', 'Current'),
+      collapseUnchanged: false,
+    });
+
+    const properties = host.querySelector<HTMLElement>('.cm-atomic-fm');
+    expect(properties?.textContent).toContain('Review plan');
+    expect(properties?.textContent).toContain('editor');
+    expect(properties?.querySelector('[contenteditable="true"]')).toBeNull();
+    expect(properties?.querySelector('button')).toBeNull();
+  });
+
+  it('exposes changed frontmatter as source with inline evidence', () => {
+    const original = [
+      '---',
+      'title: Review plan',
+      'status: draft',
+      '---',
+      '',
+      'Stable body.',
+    ].join('\n');
+    const modified = original.replace('draft', 'ready');
+    const { host, handleRef } = mountDiff({
+      originalMarkdown: original,
+      modifiedMarkdown: modified,
+      collapseUnchanged: false,
+    });
+
+    expect(host.querySelector('.cm-atomic-fm')).toBeNull();
+    expect(host.querySelector('.cm-content')?.textContent).toContain('status: draftready');
+    expect(handleRef.current?.getMarkdown()).toBe(modified);
+  });
+
   it('makes unchanged-region collapse controls keyboard accessible', async () => {
     const originalLines = Array.from({ length: 32 }, (_, index) => `Line ${index + 1}`);
     const modifiedLines = [...originalLines];

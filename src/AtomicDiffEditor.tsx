@@ -15,6 +15,8 @@ import {
 
 import { atomicEditorTheme, atomicMarkdownSyntax } from './atomic-theme';
 import { atomicDiffView } from './diff-context';
+import { frontmatterProperties } from './frontmatter-properties';
+import { frontmatter } from './frontmatter';
 import { imageBlocks } from './image-blocks';
 import { inlinePreview } from './inline-preview';
 import { tables } from './table-widget';
@@ -153,7 +155,11 @@ export function AtomicDiffEditor({
             'aria-readonly': 'true',
             role: 'document',
           }),
-          markdown({ base: markdownLanguage, codeLanguages: [...codeLanguages] }),
+          markdown({
+            base: markdownLanguage,
+            codeLanguages: [...codeLanguages],
+            extensions: [frontmatter],
+          }),
           atomicMarkdownSyntax,
           atomicEditorTheme,
           unifiedMergeView({
@@ -170,6 +176,7 @@ export function AtomicDiffEditor({
           tables({
             onLinkClick: (url) => onLinkClickRef.current?.(url),
           }),
+          frontmatterProperties(),
           imageBlocks(),
           inlinePreview({
             onLinkClick: (url) => onLinkClickRef.current?.(url),

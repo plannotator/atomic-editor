@@ -4,7 +4,13 @@ import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages';
 
 type ThemeMode = 'dark' | 'light';
 
-const ORIGINAL_MARKDOWN = `# Shipping a calmer review flow
+const ORIGINAL_MARKDOWN = `---
+title: Inline document changes
+status: spike
+tags: [editor, review]
+---
+
+# Shipping a calmer review flow
 
 The Changes tab is useful, but it pulls reviewers away from the document they are trying to understand.
 
@@ -62,7 +68,13 @@ renderDiff({ collapseAfter, inline: false });
 
 The result should be frozen, legible, and faithful.`;
 
-const MODIFIED_MARKDOWN = `# Shipping an inline review flow
+const MODIFIED_MARKDOWN = `---
+title: Inline document changes
+status: spike
+tags: [editor, review]
+---
+
+# Shipping an inline review flow
 
 The Changes tab is useful, but it pulls reviewers away from the document they are already trying to understand.
 
