@@ -236,6 +236,12 @@
   );
 }
 
+/* Unified merge inserts an empty deletion widget before a pure addition.
+ * It carries no review evidence, so do not render it as a red hairline. */
+.atomic-cm-diff-editor .cm-deletedChunk:empty {
+  display: none;
+}
+
 .atomic-cm-diff-editor .cm-deletedChunk .cm-deletedText,
 .atomic-cm-diff-editor .cm-deletedText {
   border-radius: 0.18rem;

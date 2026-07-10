@@ -1,144 +1,180 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AtomicDiffEditor, wikiLinks } from '@atomic-editor/editor';
-import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages';
+import { useEffect, useState } from 'react';
+import { AtomicDiffEditor } from '@atomic-editor/editor';
 
 type ThemeMode = 'dark' | 'light';
 
 const ORIGINAL_MARKDOWN = `---
-title: Inline document changes
-status: spike
+title: A guided tour of inline changes
+status: walkthrough
 tags: [editor, review]
 ---
 
-# Shipping a calmer review flow
+# A guided tour of inline changes
 
-The Changes tab is useful, but it pulls reviewers away from the document they are trying to understand.
+Each numbered example demonstrates one diff behavior. Start with example 1, then use Next change in the toolbar to step through the guide.
 
-## What changes in this spike
+## 1. Addition only
 
-The review stays beside the ideas it discusses. Small edits read inline, deleted words remain visible, and long stable sections fold away.
+The next sentence exists only in the newer revision, so it appears as one green added line.
 
-- [ ] Validate keyboard navigation
-- [x] Preserve the exact Markdown source
-- [ ] Exercise the large-document path
+The sentences after it are unchanged context.
+They remain neutral so the addition is easy to identify.
 
-> Review should feel like reading with context, not reconciling two unrelated panes.
+## 2. Deletion only
 
-## Compatibility notes
+The next sentence exists only in the older revision, so it remains visible in red with a strike-through.
 
-The existing editor already has rich decorations for headings, links, images, tasks, and tables. A changed atomic block must expose its source instead of hiding the diff behind a widget.
+This sentence was removed after review.
 
-| Surface | Review behavior |
+The sentences after it are unchanged context.
+They make clear where the deletion used to sit.
+
+## 3. Replacement
+
+When words change on one line, the old words are red and struck through while the new words are green.
+
+Decision: Keep the separate Changes pane.
+
+The rest of this example is unchanged.
+Replacement emphasis stays local to the edited words.
+
+## 4. One-character replacement
+
+Only the final letter changes here: the old A stays red and struck through while the new B is green.
+
+Review pass: A
+
+The rest of the line is unchanged.
+This is the smallest replacement in the tour.
+
+## 5. Changed atomic block
+
+This table changes, so it intentionally reveals Markdown source instead of hiding evidence inside a rendered widget.
+
+| Surface | Stage |
 | --- | --- |
-| Prose | Inline emphasis |
-| Changed table | Rendered widget |
-| Wiki links | Resolved labels |
+| Inline diff | Exploring |
 
-The stable metadata table below should remain rendered because it does not intersect a change.
+The table below is unchanged, so it remains rendered as a useful control.
 
 | Owner | Stage |
 | --- | --- |
 | Editor team | Spike |
 
-Related: [[editor-roadmap|Editor roadmap]] and [[review-principles|Review principles]].
+Changed and unchanged atomic blocks therefore remain distinguishable.
+No document text is rewritten to produce either presentation.
 
-## Performance guardrail
+## 6. Collapsed unchanged context
 
-The editor should preserve enough surrounding lines to orient the reviewer.
+Context mode: Show every stable line.
 
-Context line 01 — stable material stays available when a reviewer asks for it.
-Context line 02 — stable material stays available when a reviewer asks for it.
-Context line 03 — stable material stays available when a reviewer asks for it.
-Context line 04 — stable material stays available when a reviewer asks for it.
-Context line 05 — stable material stays available when a reviewer asks for it.
-Context line 06 — stable material stays available when a reviewer asks for it.
-Context line 07 — stable material stays available when a reviewer asks for it.
-Context line 08 — stable material stays available when a reviewer asks for it.
-Context line 09 — stable material stays available when a reviewer asks for it.
-Context line 10 — stable material stays available when a reviewer asks for it.
-Context line 11 — stable material stays available when a reviewer asks for it.
-Context line 12 — stable material stays available when a reviewer asks for it.
-Context line 13 — stable material stays available when a reviewer asks for it.
-Context line 14 — stable material stays available when a reviewer asks for it.
+The “N unchanged lines” control is not a diff. It expands a long run of stable lines on demand.
 
-\`\`\`ts
-const collapseAfter = 4;
-renderDiff({ collapseAfter, inline: false });
-\`\`\`
-
-The result should be frozen, legible, and faithful.`;
+Stable context line 01 — unchanged material remains available.
+Stable context line 02 — unchanged material remains available.
+Stable context line 03 — unchanged material remains available.
+Stable context line 04 — unchanged material remains available.
+Stable context line 05 — unchanged material remains available.
+Stable context line 06 — unchanged material remains available.
+Stable context line 07 — unchanged material remains available.
+Stable context line 08 — unchanged material remains available.
+Stable context line 09 — unchanged material remains available.
+Stable context line 10 — unchanged material remains available.
+Stable context line 11 — unchanged material remains available.
+Stable context line 12 — unchanged material remains available.
+Stable context line 13 — unchanged material remains available.
+Stable context line 14 — unchanged material remains available.
+Stable context line 15 — unchanged material remains available.
+Stable context line 16 — unchanged material remains available.`;
 
 const MODIFIED_MARKDOWN = `---
-title: Inline document changes
-status: spike
+title: A guided tour of inline changes
+status: walkthrough
 tags: [editor, review]
 ---
 
-# Shipping an inline review flow
+# A guided tour of inline changes
 
-The Changes tab is useful, but it pulls reviewers away from the document they are already trying to understand.
+Each numbered example demonstrates one diff behavior. Start with example 1, then use Next change in the toolbar to step through the guide.
 
-## What this spike proves
+## 1. Addition only
 
-The review stays inside the document it discusses. Small edits read inline, deleted words remain visible where they were, and long stable sections fold away without losing orientation.
+The next sentence exists only in the newer revision, so it appears as one green added line.
 
-- [x] Validate keyboard navigation
-- [x] Preserve the exact Markdown source
-- [x] Exercise the large-document path
+A newly added sentence appears only in the current version.
 
-> Review should feel like reading with context, not reconciling two unrelated panes.
+The sentences after it are unchanged context.
+They remain neutral so the addition is easy to identify.
 
-The frozen surface rejects document transactions at the editor boundary, including changes dispatched by consumer extensions.
+## 2. Deletion only
 
-## Compatibility notes
+The next sentence exists only in the older revision, so it remains visible in red with a strike-through.
 
-The existing editor already has rich decorations for headings, links, images, tasks, and tables. A changed atomic block exposes its source so the diff can never disappear behind a widget.
+The sentences after it are unchanged context.
+They make clear where the deletion used to sit.
 
-| Surface | Review behavior |
+## 3. Replacement
+
+When words change on one line, the old words are red and struck through while the new words are green.
+
+Decision: Review changes inside the document.
+
+The rest of this example is unchanged.
+Replacement emphasis stays local to the edited words.
+
+## 4. One-character replacement
+
+Only the final letter changes here: the old A stays red and struck through while the new B is green.
+
+Review pass: B
+
+The rest of the line is unchanged.
+This is the smallest replacement in the tour.
+
+## 5. Changed atomic block
+
+This table changes, so it intentionally reveals Markdown source instead of hiding evidence inside a rendered widget.
+
+| Surface | Stage |
 | --- | --- |
-| Prose | Inline emphasis |
-| Changed table | Source with diff marks |
-| Wiki links | Rich when stable, source when changed |
+| Inline diff | Viable |
 
-The stable metadata table below should remain rendered because it does not intersect a change.
+The table below is unchanged, so it remains rendered as a useful control.
 
 | Owner | Stage |
 | --- | --- |
 | Editor team | Spike |
 
-Related: [[editor-roadmap|Editor plan]] and [[review-principles|Review principles]].
+Changed and unchanged atomic blocks therefore remain distinguishable.
+No document text is rewritten to produce either presentation.
 
-## Performance guardrail
+## 6. Collapsed unchanged context
 
-The editor should preserve enough surrounding lines to orient the reviewer.
+Context mode: Collapse long runs of stable lines.
 
-Context line 01 — stable material stays available when a reviewer asks for it.
-Context line 02 — stable material stays available when a reviewer asks for it.
-Context line 03 — stable material stays available when a reviewer asks for it.
-Context line 04 — stable material stays available when a reviewer asks for it.
-Context line 05 — stable material stays available when a reviewer asks for it.
-Context line 06 — stable material stays available when a reviewer asks for it.
-Context line 07 — stable material stays available when a reviewer asks for it.
-Context line 08 — stable material stays available when a reviewer asks for it.
-Context line 09 — stable material stays available when a reviewer asks for it.
-Context line 10 — stable material stays available when a reviewer asks for it.
-Context line 11 — stable material stays available when a reviewer asks for it.
-Context line 12 — stable material stays available when a reviewer asks for it.
-Context line 13 — stable material stays available when a reviewer asks for it.
-Context line 14 — stable material stays available when a reviewer asks for it.
+The “N unchanged lines” control is not a diff. It expands a long run of stable lines on demand.
 
-\`\`\`ts
-const contextLines = 3;
-renderDiff({ contextLines, inline: true });
-\`\`\`
-
-The result is frozen, legible, and byte-faithful.`;
+Stable context line 01 — unchanged material remains available.
+Stable context line 02 — unchanged material remains available.
+Stable context line 03 — unchanged material remains available.
+Stable context line 04 — unchanged material remains available.
+Stable context line 05 — unchanged material remains available.
+Stable context line 06 — unchanged material remains available.
+Stable context line 07 — unchanged material remains available.
+Stable context line 08 — unchanged material remains available.
+Stable context line 09 — unchanged material remains available.
+Stable context line 10 — unchanged material remains available.
+Stable context line 11 — unchanged material remains available.
+Stable context line 12 — unchanged material remains available.
+Stable context line 13 — unchanged material remains available.
+Stable context line 14 — unchanged material remains available.
+Stable context line 15 — unchanged material remains available.
+Stable context line 16 — unchanged material remains available.`;
 
 /** Focused browser harness for the frozen inline-diff spike. */
 export function DiffDemo() {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [expanded, setExpanded] = useState(false);
-  const extensions = useMemo(() => [wikiLinks()], []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -184,9 +220,25 @@ export function DiffDemo() {
           </div>
         </div>
         <p className="diff-demo-description">
-          The newer revision remains the document. Insertions, deletions, and stable rich Markdown
-          share one reading surface; changed atomic blocks reveal source so no evidence is hidden.
+          Six isolated examples explain one behavior at a time. Start at example 1 or use Next to
+          step through additions, removals, replacements, atomic blocks, and collapsed context.
         </p>
+        <div className="diff-demo-key" aria-label="How to read the diff">
+          <span className="diff-demo-key-label">Reading key</span>
+          <span className="diff-demo-key-item">
+            <span className="diff-demo-key-swatch added" aria-hidden="true" />
+            <span><strong>Green</strong> is added</span>
+          </span>
+          <span className="diff-demo-key-item">
+            <span className="diff-demo-key-swatch removed" aria-hidden="true" />
+            <span><strong>Red + strike</strong> is removed</span>
+          </span>
+          <span className="diff-demo-key-item">
+            <span className="diff-demo-key-swatch unchanged" aria-hidden="true" />
+            <span><strong>Neutral</strong> is unchanged</span>
+          </span>
+          <span className="diff-demo-key-hint">Red and green together mean replacement.</span>
+        </div>
       </header>
 
       <main className="demo-canvas diff-demo-canvas">
@@ -195,9 +247,7 @@ export function DiffDemo() {
             originalMarkdown={ORIGINAL_MARKDOWN}
             modifiedMarkdown={MODIFIED_MARKDOWN}
             documentId={`inline-diff-spike-${expanded ? 'expanded' : 'collapsed'}`}
-            collapseUnchanged={expanded ? false : { margin: 3, minSize: 7 }}
-            codeLanguages={ATOMIC_CODE_LANGUAGES}
-            extensions={extensions}
+            collapseUnchanged={expanded ? false : { margin: 5, minSize: 10 }}
           />
         </div>
       </main>
