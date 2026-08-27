@@ -97,8 +97,9 @@ export function parsedLength(state: EditorState): number {
 }
 
 // Each idle tick asks the parser for one bounded segment: from the
-// last observed tree length to `lastTreeLen + threshold`, clamped to
-// the document. Targeting a bounded position matters because the
+// last observed tree length to `lastTreeLen + threshold`, or to the
+// viewport end if the user has scrolled further, clamped to the
+// document. Targeting a bounded position matters because the
 // parse context only publishes a new tree when a parse COMPLETES; a
 // tick that aims at the whole document and runs out of budget leaves
 // the tree exactly where it was, and nothing downstream ever hears
@@ -177,6 +178,11 @@ export const treeProgressPlugin = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
+      if (update.viewportChanged && update.view.viewport.to > this._lastTreeLen) {
+        // Scrolled past the parsed region: make sure a tick is coming
+        // so the next segment can stretch to the viewport.
+        this._schedule();
+      }
       if (update.docChanged) {
         // Doc edits invalidate everything we knew about tree length;
         // lezer re-parses from the edit point. Reset and kick the
@@ -208,10 +214,16 @@ export const treeProgressPlugin = ViewPlugin.fromClass(
       const docLen = state.doc.length;
       if (this._lastTreeLen >= docLen) return;
 
-      // One segment per tick. `ensureSyntaxTree` returns null when the
-      // budget expires before the target; the tree is then unchanged
-      // and the next tick retries the same segment.
-      const target = Math.min(docLen, this._lastTreeLen + this._threshold);
+      // One segment per tick, stretched to the viewport end when the
+      // user has scrolled past the parsed region so the content on
+      // screen is parsed first. `ensureSyntaxTree` returns null when
+      // the budget expires before the target; the tree is then
+      // unchanged, the in-flight parse keeps its progress inside the
+      // context, and the next tick continues toward the same target.
+      const target = Math.min(
+        docLen,
+        Math.max(this._lastTreeLen + this._threshold, this.view.viewport.to),
+      );
       const ensured = ensureSyntaxTree(state, target, TICK_BUDGET_MS);
       const newLen = ensured ? ensured.length : this._lastTreeLen;
 

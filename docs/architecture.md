@@ -165,7 +165,8 @@ Content past the parsed prefix would otherwise render as raw
 starve it) asks the parser for one bounded segment, from the last
 observed tree length to that plus an adaptive threshold (8 KB,
 doubling after each rebuild up to 64 KB, reset on every doc change),
-within a 30 ms budget. The parse context only publishes a new tree
+or to the viewport end when the user has scrolled past the parsed
+region, within a 30 ms budget. The parse context only publishes a new tree
 when a parse completes, so the bounded target is what makes growth
 progressive: every tick that finishes its segment lands a longer tree
 and dispatches one `treeGrowthEffect`, and all three builders rebuild
