@@ -12,7 +12,8 @@
  *     assertion, and the script exits 1 when it is violated)
  *   - wall time for EditorState.create plus EditorView construction
  *   - how long the idle loop needs to cover the whole document and how
- *     many tree-growth rebuilds it dispatched on the way
+ *     many tree-growth rebuilds it dispatched on the way (one per
+ *     completed segment: several for anything a few windows long)
  *
  * Runs the TypeScript sources through vite-node (shipped with vitest):
  *
@@ -29,7 +30,6 @@ import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
 
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 
@@ -38,7 +38,7 @@ import { frontmatterProperties } from '../src/frontmatter-properties';
 import { imageBlocks } from '../src/image-blocks';
 import { inlinePreview } from '../src/inline-preview';
 import { tables } from '../src/table-widget';
-import { MOUNT_PARSE_WINDOW, treeGrowthEffect } from '../src/tree-progress';
+import { MOUNT_PARSE_WINDOW, parsedLength, treeGrowthEffect } from '../src/tree-progress';
 
 const RUNS = Number(process.env.BENCH_RUNS ?? 5);
 const SLACK = 8192; // Lezer finishes the block it is in when the window ends.
@@ -114,9 +114,7 @@ function extensions(counter) {
   ];
 }
 
-function reach(state) {
-  return (ensureSyntaxTree(state, 1, 0) ?? syntaxTree(state)).length;
-}
+const reach = (state) => parsedLength(state);
 
 // Table widgets are block replacements whose range starts on a pipe;
 // the frontmatter properties card is the other block replacement and

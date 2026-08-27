@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { imageBlocks } from '../image-blocks';
@@ -8,8 +7,11 @@ import { inlinePreview } from '../inline-preview';
 import { tables } from '../table-widget';
 import {
   decorationTree,
+  INITIAL_GROWTH_THRESHOLD,
   MOUNT_PARSE_WINDOW,
   mountParseTarget,
+  parsedLength,
+  treeGrowthEffect,
 } from '../tree-progress';
 import { frontmatter } from '../frontmatter';
 
@@ -57,23 +59,19 @@ function countBlockWidgets(view: EditorView): { tables: number; images: number }
   return { tables: tablesSeen, images: imagesSeen };
 }
 
-// `syntaxTree(state)` is the snapshot the language field took when the
-// state was built; `ensureSyntaxTree` advances the shared parse context
-// and hands back its live tree. Asking it for position 1 with no budget
-// is the cheapest way to read the context's current reach.
-function parsedLength(state: EditorState): number {
-  return (ensureSyntaxTree(state, 1, 0) ?? syntaxTree(state)).length;
-}
-
 function countTablesBefore(text: string, pos: number): number {
   return text.slice(0, pos).split('\n| --- | --- |\n').length - 1;
 }
 
-const extensions = () => [
+const extensions = (onGrowth?: (reach: number) => void) => [
   markdown({ base: markdownLanguage, extensions: [frontmatter] }),
   tables(),
   imageBlocks(),
   inlinePreview(),
+  EditorState.transactionExtender.of((tr) => {
+    if (onGrowth && tr.effects.some((e) => e.is(treeGrowthEffect))) onGrowth(parsedLength(tr.state));
+    return null;
+  }),
 ];
 
 const views: EditorView[] = [];
@@ -170,6 +168,32 @@ describe('mount-time parse window', () => {
     const afterEdit = countBlockWidgets(view);
     expect(afterEdit.tables).toBe(tableCount);
     expect(afterEdit.images).toBe(imageCount);
+    parent.remove();
+  });
+
+  it('grows the tree in several segments, each one dispatching a rebuild', async () => {
+    // Several windows long, so the loop needs more than one tick even
+    // when a tick is fast. The failure this guards: a tick that aims at
+    // the whole document, runs out of budget, and publishes nothing,
+    // which collapses growth into one late rebuild at the very end.
+    const { text, tables: tableCount } = bigDocument(160 * 1024);
+    const reaches: number[] = [];
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const view = new EditorView({
+      state: EditorState.create({ doc: text, extensions: extensions((r) => reaches.push(r)) }),
+      parent,
+    });
+    views.push(view);
+
+    await waitFor(() => countBlockWidgets(view).tables === tableCount);
+    expect(reaches.length).toBeGreaterThan(1);
+    // Every rebuild saw a longer tree than the one before, the first
+    // one landed just past the mount window rather than at the end,
+    // and the last one covers the document.
+    for (let i = 1; i < reaches.length; i++) expect(reaches[i]).toBeGreaterThan(reaches[i - 1]);
+    expect(reaches[0]).toBeLessThan(MOUNT_PARSE_WINDOW + INITIAL_GROWTH_THRESHOLD + 4096);
+    expect(reaches[reaches.length - 1]).toBe(text.length);
     parent.remove();
   });
 
