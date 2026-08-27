@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Until the package reaches `1.0.0`, minor versions may include breaking API
 changes as the public surface stabilizes.
 
+## [Unreleased]
+
+### Changed
+
+- The mount-time syntax tree is bounded to an initial window (16 KB or
+  the viewport, 20 ms budget) instead of a synchronous whole-document
+  parse. Tables, image blocks, and the inline preview share that policy
+  through one `decorationTree` helper; the tree-progress idle loop grows
+  the tree with an adaptive rebuild threshold and decorates the rest as
+  it fills in. Decoration-only: document bytes, editing commands, undo
+  history, and the public API are unchanged. Entering a 283 KB document
+  no longer blocks the main thread on the parse.
+- New `npm run bench:entry` benchmark asserts the mount-time parse stays
+  inside the window.
+
 ## [0.8.0]
 
 ### Added

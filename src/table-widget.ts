@@ -1,4 +1,4 @@
-import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
+import { syntaxTree } from '@codemirror/language';
 import {
   EditorSelection,
   Facet,
@@ -18,7 +18,12 @@ import {
 } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { intersectsAtomicDiffChange, isAtomicDiffView } from './diff-context';
-import { treeGrowthEffect, treeProgressPlugin } from './tree-progress';
+import {
+  decorationTree,
+  treeGrowthEffect,
+  treeProgressPlugin,
+  type DecorationTreeReason,
+} from './tree-progress';
 
 // GFM tables as a WYSIWYG block widget.
 //
@@ -1394,16 +1399,14 @@ function selectionOnLine(state: EditorState, from: number, to: number): boolean 
   return false;
 }
 
-function buildTableWidgets(state: EditorState): DecorationSet {
+function buildTableWidgets(state: EditorState, reason: DecorationTreeReason): DecorationSet {
   const ranges: Range<Decoration>[] = [];
-  // Force full-doc parse so tables past the initial parsed region
-  // also get the widget treatment. This StateField only rebuilds on
-  // doc change; CM6's background parser advancing the tree later
-  // doesn't retrigger it, so a partial tree at mount means orphaned
-  // `| col |` raw lines for the rest of the session. 200ms budget
-  // bounds the worst case on very long atoms.
-  const tree =
-    ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
+  // How far the parser is forced before the walk is decided by
+  // `decorationTree` (shared with images and inline-preview): a bounded
+  // window at mount, the whole document on an edit, no forcing on a
+  // tree-growth rebuild. Tables past the parsed region get their widget
+  // when `treeProgressPlugin` grows the tree and re-runs this builder.
+  const tree = decorationTree(state, reason);
   const doc = state.doc;
 
   tree.iterate({
@@ -1515,13 +1518,13 @@ function selectionMayToggleTable(tr: Transaction): boolean {
 }
 
 const tableField = StateField.define<DecorationSet>({
-  create: (state) => buildTableWidgets(state),
+  create: (state) => buildTableWidgets(state, 'mount'),
   update(deco, tr) {
     // Tree-growth effect: lezer's background parser caught up to a
     // region that wasn't parsed when we last built. Rebuild so any
     // newly-visible Table nodes get their widget.
     for (const effect of tr.effects) {
-      if (effect.is(treeGrowthEffect)) return buildTableWidgets(tr.state);
+      if (effect.is(treeGrowthEffect)) return buildTableWidgets(tr.state, 'growth');
     }
     if (!tr.docChanged) {
       // A caret move with no doc change can still flip a table between
@@ -1530,12 +1533,12 @@ const tableField = StateField.define<DecorationSet>({
       // leaves a pipe-bearing line — the same cheap table proxy
       // `changeAffectsTables` uses — so ordinary cursor motion through
       // prose never pays for a rebuild or a forced parse.
-      if (selectionMayToggleTable(tr)) return buildTableWidgets(tr.state);
+      if (selectionMayToggleTable(tr)) return buildTableWidgets(tr.state, 'selection');
       return deco;
     }
     const mapped = deco.map(tr.changes);
     if (!changeAffectsTables(tr, deco)) return mapped;
-    return buildTableWidgets(tr.state);
+    return buildTableWidgets(tr.state, 'edit');
   },
   provide: (f) => EditorView.decorations.from(f),
 });

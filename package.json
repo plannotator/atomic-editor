@@ -57,6 +57,7 @@
     "build": "tsc -p tsconfig.build.json && cpy src/styles/inline-preview.css dist/styles --flat",
     "build:demo": "vite build",
     "bench:diff": "node scripts/bench-inline-diff.mjs",
+    "bench:entry": "vite-node scripts/bench-editor-entry.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

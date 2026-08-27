@@ -144,13 +144,25 @@ rebuild decorations, because on iOS that halts kinetic momentum
 whenever the rebuild produces new decorations for lines at the top of
 a scroll-up viewport (CM6 anchor conflict with the scroll animation).
 
-The build function calls `ensureSyntaxTree(state, state.doc.length,
-200)` to force full-doc parser coverage before walking the tree. A
-partial parse means content past the initial parse window renders as
-raw `##`/`**` forever, since decorations don't rebuild on scroll
-anymore. Full coverage is a one-shot cost; subsequent calls are near-
-free because `ensureSyntaxTree` short-circuits once the tree reaches
-the target.
+The build function gets its tree from `decorationTree` in
+`tree-progress.ts`, the one place that decides how far the parser is
+forced before a walk. Tables and image blocks use the same helper, so
+the three builders always agree on coverage. At mount (and on cursor
+or focus rebuilds) it only guarantees a bounded prefix: 16 KB or the
+current viewport end, whichever is larger, inside a 20 ms budget. That
+is what keeps opening a large document from paying a synchronous
+whole-document Lezer parse inside the first paint. A doc change forces
+the whole document with the historical 200 ms budget, so editing
+behaves exactly as before. A tree-growth rebuild never forces at all.
+
+Content past the parsed prefix would otherwise render as raw
+`##`/`**` forever, since decorations don't rebuild on scroll. The
+`treeProgressPlugin` closes that gap: it advances the parser in 30 ms
+idle ticks and dispatches `treeGrowthEffect` whenever the tree has
+grown past an adaptive threshold (8 KB, doubling after each rebuild up
+to 64 KB, reset on every doc change), and all three builders rebuild
+on that effect. `scripts/bench-editor-entry.mjs` asserts the mount
+reach stays inside the window.
 
 ## What gets hidden, styled, or replaced
 
