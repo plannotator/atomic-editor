@@ -1,4 +1,3 @@
-import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import {
   StateField,
   type EditorState,
@@ -13,7 +12,12 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { intersectsAtomicDiffChange, isAtomicDiffView } from './diff-context';
-import { treeGrowthEffect, treeProgressPlugin } from './tree-progress';
+import {
+  decorationTree,
+  treeGrowthEffect,
+  treeProgressPlugin,
+  type DecorationTreeReason,
+} from './tree-progress';
 
 // Image blocks.
 //
@@ -123,17 +127,14 @@ class ImageWidget extends WidgetType {
   }
 }
 
-function buildImageBlocks(state: EditorState): DecorationSet {
+function buildImageBlocks(state: EditorState, reason: DecorationTreeReason): DecorationSet {
   const ranges: Range<Decoration>[] = [];
-  // Push the parser to cover the whole doc so image nodes in
-  // regions CM6 hasn't yet parsed get widgetized. Without this, for
-  // moderately long atoms the initial parse doesn't reach the
-  // bottom and images past the initial parse window render as raw
-  // `![alt](url)` text forever — the StateField only rebuilds on
-  // doc change, not on parser advance. 200ms is a generous
-  // upper bound; typical atoms finish in well under 10ms.
-  const tree =
-    ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
+  // Parse reach is decided by `decorationTree` (shared with tables and
+  // inline-preview): a bounded window at mount, the whole document on
+  // an edit, no forcing on a tree-growth rebuild. Images past the
+  // parsed region get their widget when `treeProgressPlugin` grows the
+  // tree and re-runs this builder.
+  const tree = decorationTree(state, reason);
 
   tree.iterate({
     enter: (node) => {
@@ -216,13 +217,13 @@ function changeAffectsImages(tr: Transaction, existing: DecorationSet): boolean 
 }
 
 const imageBlocksField = StateField.define<DecorationSet>({
-  create: (state) => buildImageBlocks(state),
+  create: (state) => buildImageBlocks(state, 'mount'),
   update(deco, tr) {
     // Tree-growth effect: the background parser caught up to a
     // region that wasn't parsed when we last built. Rebuild so any
     // newly-visible Image nodes get their widget.
     for (const effect of tr.effects) {
-      if (effect.is(treeGrowthEffect)) return buildImageBlocks(tr.state);
+      if (effect.is(treeGrowthEffect)) return buildImageBlocks(tr.state, 'growth');
     }
     // Selection and viewport changes don't affect the widget set
     // (though they do affect whether the surrounding markdown is
@@ -234,7 +235,7 @@ const imageBlocksField = StateField.define<DecorationSet>({
     // image.
     const mapped = deco.map(tr.changes);
     if (!changeAffectsImages(tr, deco)) return mapped;
-    return buildImageBlocks(tr.state);
+    return buildImageBlocks(tr.state, 'edit');
   },
   provide: (f) => EditorView.decorations.from(f),
 });

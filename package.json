@@ -57,6 +57,7 @@
     "build": "tsc -p tsconfig.build.json && cpy src/styles/inline-preview.css dist/styles --flat",
     "build:demo": "vite build",
     "bench:diff": "node scripts/bench-inline-diff.mjs",
+    "bench:entry": "vite-node scripts/bench-editor-entry.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -178,6 +179,7 @@
     "react-dom": "^18.3.1",
     "typescript": "^5.6.0",
     "vite": "^6.0.0",
+    "vite-node": "^3.2.4",
     "vitest": "^3.2.4"
   }
 }

@@ -144,13 +144,36 @@ rebuild decorations, because on iOS that halts kinetic momentum
 whenever the rebuild produces new decorations for lines at the top of
 a scroll-up viewport (CM6 anchor conflict with the scroll animation).
 
-The build function calls `ensureSyntaxTree(state, state.doc.length,
-200)` to force full-doc parser coverage before walking the tree. A
-partial parse means content past the initial parse window renders as
-raw `##`/`**` forever, since decorations don't rebuild on scroll
-anymore. Full coverage is a one-shot cost; subsequent calls are near-
-free because `ensureSyntaxTree` short-circuits once the tree reaches
-the target.
+The build function gets its tree from `decorationTree` in
+`tree-progress.ts`, the one place that decides how far the parser is
+forced before a walk. Tables and image blocks use the same helper, so
+the three builders always agree on coverage. At mount (and on cursor
+or focus rebuilds) it only guarantees a bounded prefix inside a 20 ms
+budget: the two StateFields (tables, image blocks) have no view and
+use the fixed 16 KB window; the inline-preview ViewPlugin passes
+`view.viewport.to`, so it covers the window or the current viewport,
+whichever is larger. That is what keeps opening a large document from
+paying a synchronous whole-document Lezer parse inside the first
+paint. A doc change forces the whole document with the historical
+200 ms budget, so editing behaves exactly as before. A tree-growth
+rebuild never forces at all.
+
+Content past the parsed prefix would otherwise render as raw
+`##`/`**` forever, since decorations don't rebuild on scroll. The
+`treeProgressPlugin` closes that gap. Each idle tick (a
+`requestIdleCallback` with a 400 ms timeout, so a busy host cannot
+starve it) asks the parser for one bounded segment, from the last
+observed tree length to that plus an adaptive threshold (8 KB,
+doubling after each rebuild up to 64 KB, reset on every doc change),
+or to the viewport end when the user has scrolled past the parsed
+region, within a 30 ms budget. The parse context only publishes a new tree
+when a parse completes, so the bounded target is what makes growth
+progressive: every tick that finishes its segment lands a longer tree
+and dispatches one `treeGrowthEffect`, and all three builders rebuild
+on it. A 300 KB document is decorated in about eight steps rather
+than in one late rebuild at the end. `scripts/bench-editor-entry.mjs`
+asserts the mount reach stays inside the window and reports the
+number of growth rebuilds.
 
 ## What gets hidden, styled, or replaced
 

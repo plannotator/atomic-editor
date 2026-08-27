@@ -1,4 +1,4 @@
-import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
+import { syntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 import {
   EditorSelection,
@@ -22,7 +22,12 @@ import {
   intersectsAtomicDiffChange,
   isAtomicDiffView,
 } from './diff-context';
-import { treeGrowthEffect, treeProgressPlugin } from './tree-progress';
+import {
+  decorationTree,
+  treeGrowthEffect,
+  treeProgressPlugin,
+  type DecorationTreeReason,
+} from './tree-progress';
 
 // Inline preview — the Obsidian "Live Preview" model.
 //
@@ -334,7 +339,7 @@ function pushReplace(
   }
 }
 
-function buildInlineDecorations(view: EditorView): DecorationSet {
+function buildInlineDecorations(view: EditorView, reason: DecorationTreeReason): DecorationSet {
   const { state } = view;
   const { doc } = state;
   const ranges: Range<Decoration>[] = [];
@@ -357,16 +362,15 @@ function buildInlineDecorations(view: EditorView): DecorationSet {
   // walk on every doc / selection / focus change instead of a
   // smaller walk on every scroll.
   //
-  // `ensureSyntaxTree(..., doc.length, ...)` guarantees the tree
-  // actually covers the whole doc before we walk it. Without this,
-  // for moderately long atoms the incremental parser's initial
-  // pass falls short of the end, we'd walk only a prefix, and
-  // content past that point renders as raw `##`/`**` forever —
-  // decorations don't rebuild on scroll anymore. Subsequent calls
-  // are near-free because ensureSyntaxTree short-circuits once the
-  // tree reaches the target.
-  const tree =
-    ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
+  // How far the parser is forced before the walk is decided by
+  // `decorationTree` (shared with tables and images): at mount and on
+  // cursor/focus rebuilds only a bounded window that always covers the
+  // current viewport, the whole document on an edit, no forcing on a
+  // tree-growth rebuild. Content past the parsed prefix renders as raw
+  // `##`/`**` only until `treeProgressPlugin` grows the tree and
+  // re-runs this builder; that is what keeps whole-document coverage
+  // without a synchronous whole-document parse inside the first paint.
+  const tree = decorationTree(state, reason, view.viewport.to);
 
   // `from` positions of Link nodes whose range overlaps a selection.
   // Link children (LinkMark/URL/LinkTitle) hide unless their parent
@@ -805,7 +809,7 @@ const inlinePreviewPlugin = ViewPlugin.fromClass(
     decorations: DecorationSet;
 
     constructor(view: EditorView) {
-      this.decorations = buildInlineDecorations(view);
+      this.decorations = buildInlineDecorations(view, 'mount');
     }
 
     update(update: ViewUpdate) {
@@ -854,7 +858,16 @@ const inlinePreviewPlugin = ViewPlugin.fromClass(
         update.focusChanged ||
         treeGrew
       ) {
-        this.decorations = buildInlineDecorations(update.view);
+        // An edit forces the whole document as before; a growth tick
+        // walks what the idle loop parsed; a cursor or focus change
+        // keeps the bounded window so a click into a large document
+        // never drags the remaining parse onto the main thread.
+        const reason: DecorationTreeReason = update.docChanged
+          ? 'edit'
+          : treeGrew
+            ? 'growth'
+            : 'selection';
+        this.decorations = buildInlineDecorations(update.view, reason);
       }
     }
   },
