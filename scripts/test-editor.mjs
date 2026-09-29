@@ -2314,6 +2314,97 @@ async function probeEditEdges(page) {
   await resetToCanonical(page);
 }
 
+// ---------- link widgets ----------
+//
+// `?mode=link-widgets` mounts an editor with a `linkWidgets()` spec that
+// draws `dec://` links as a chip (demo/LinkWidgetsDemo.tsx). These probes
+// drive the real pointer and keyboard paths the unit tests can only
+// approximate: a held press keeps the chip (the freeze), the click lands
+// on the chip's own handler rather than the engine link opener, keyboard
+// entry reveals the source, and blur brings the chip back.
+
+async function probeLinkWidgets(page) {
+  const pageErrorCountBefore = pageErrors.length;
+  log('info', `navigating to ${base}/?mode=link-widgets`);
+  await page.goto(`${base}/?mode=link-widgets`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.demo-link-chip');
+  await page.waitForTimeout(250);
+
+  const chipState = () =>
+    page.evaluate(() => {
+      const chip = document.querySelector('.demo-link-chip');
+      const line = chip?.closest('.cm-line') ??
+        Array.from(document.querySelectorAll('.cm-line')).find((l) => l.textContent?.includes('Decided'));
+      return {
+        chips: document.querySelectorAll('.demo-link-chip').length,
+        wrappedInLink: !!chip?.closest('.cm-atomic-link'),
+        linkMarkOnLine: !!line?.querySelector('.cm-atomic-link'),
+        lineText: line?.textContent ?? '',
+        counters: { ...window.__linkWidgetProbe },
+      };
+    });
+
+  const drawn = await chipState();
+  record(
+    'link widgets: chip draws alone',
+    drawn.chips === 1 && !drawn.wrappedInLink && !drawn.linkMarkOnLine ? 'pass' : 'fail',
+    `chips=${drawn.chips} wrapped=${drawn.wrappedInLink} linkMark=${drawn.linkMarkOnLine} line="${drawn.lineText}"`,
+  );
+
+  const box = await page.locator('.demo-link-chip').boundingBox();
+  if (!box) {
+    record('link widgets: held press keeps chip', 'fail', 'no chip bbox');
+    return;
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(250);
+  const held = await chipState();
+  record(
+    'link widgets: held press keeps chip',
+    held.chips === 1 && !held.linkMarkOnLine ? 'pass' : 'fail',
+    `chips=${held.chips} linkMark=${held.linkMarkOnLine} line="${held.lineText}"`,
+  );
+  await page.mouse.up();
+  // Past the freeze tail (100ms) so any reveal would have applied.
+  await page.waitForTimeout(300);
+  const clicked = await chipState();
+  record(
+    'link widgets: click reaches chip handler',
+    clicked.counters.chipClicks === 1 && clicked.counters.linkOpens === 0 && clicked.chips === 1
+      ? 'pass'
+      : 'fail',
+    `chipClicks=${clicked.counters.chipClicks} linkOpens=${clicked.counters.linkOpens} chipsAfter=${clicked.chips}`,
+  );
+
+  // Keyboard entry from the link's end edge: End, then back over " today.".
+  await page.click('.cm-line >> text=A plain link stays');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('End');
+  for (let i = 0; i < ' today.'.length; i += 1) await page.keyboard.press('ArrowLeft');
+  const entered = await chipState();
+  record(
+    'link widgets: keyboard entry reveals source',
+    entered.chips === 0 && entered.lineText.includes('[Ship on Friday](dec://42)') ? 'pass' : 'fail',
+    `chips=${entered.chips} line="${entered.lineText}"`,
+  );
+
+  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+  await page.waitForTimeout(150);
+  const blurred = await chipState();
+  record(
+    'link widgets: blur restores chip',
+    blurred.chips === 1 && !blurred.linkMarkOnLine ? 'pass' : 'fail',
+    `chips=${blurred.chips} line="${blurred.lineText}"`,
+  );
+
+  const newErrors = pageErrors.slice(pageErrorCountBefore);
+  record('link widgets: no page errors', newErrors.length === 0 ? 'pass' : 'fail', newErrors.join(' | ') || 'none');
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'link-widgets.png'), fullPage: false });
+}
+
 async function probeInlineDiff(page) {
   const pageErrorCountBefore = pageErrors.length;
   log('info', `navigating to ${base}/?mode=diff`);
@@ -2471,6 +2562,8 @@ async function run() {
     // editable probes retain one shared editor state and the diff keeps its
     // own screenshot and layout assertions.
     await probeInlineDiff(page);
+    // Separate link-widgets harness, also its own navigation.
+    await probeLinkWidgets(page);
 
     const failCount = results.filter((r) => r.status === 'fail').length;
     const warnCount = results.filter((r) => r.status === 'warn').length;

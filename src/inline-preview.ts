@@ -23,6 +23,11 @@ import {
   isAtomicDiffView,
 } from './diff-context';
 import {
+  linkWidgetsFacet,
+  matchLinkWidget,
+  refreshLinkWidgets,
+} from './link-widgets';
+import {
   decorationTree,
   treeGrowthEffect,
   treeProgressPlugin,
@@ -371,6 +376,7 @@ function buildInlineDecorations(view: EditorView, reason: DecorationTreeReason):
   // re-runs this builder; that is what keeps whole-document coverage
   // without a synchronous whole-document parse inside the first paint.
   const tree = decorationTree(state, reason, view.viewport.to);
+  const linkSpecs = state.facet(linkWidgetsFacet);
 
   // `from` positions of Link nodes whose range overlaps a selection.
   // Link children (LinkMark/URL/LinkTitle) hide unless their parent
@@ -436,6 +442,18 @@ function buildInlineDecorations(view: EditorView, reason: DecorationTreeReason):
           : node.to;
         if (intersectsAtomicDiffChange(state, sourceFrom, sourceTo)) {
           diffSourceLinkStarts.add(node.from);
+        }
+        // Host link widgets (`linkWidgets()`): offered only where the
+        // link's syntax would be hidden — the same reveal rule as the
+        // LinkMark/URL/LinkTitle children below. The widget replaces
+        // the whole range in place of the `cm-atomic-link` mark and the
+        // child replaces, so the children are skipped.
+        if (!activeLinkStarts.has(node.from) && !diffSourceLinkStarts.has(node.from)) {
+          const widget = matchLinkWidget(state, linkSpecs, node.node);
+          if (widget) {
+            pushReplace(ranges, state, node.from, node.to, { widget });
+            return false;
+          }
         }
       }
       const lineClass = LINE_CLASS_BY_BLOCK[node.name];
@@ -826,6 +844,9 @@ const inlinePreviewPlugin = ViewPlugin.fromClass(
       // heightmap ("No tile at position …" → broken scrollIntoView). The
       // freeze only needs to suppress the *selection*-driven reveal that
       // makes a click jitter; typing should reveal syntax as normal.
+      // A `refreshLinkWidgets` that lands mid-press waits too: the
+      // release (`justUnfroze`) rebuilds and asks `match` again, so a
+      // held press never swaps a link widget.
       if (nextFrozen && !justUnfroze && !update.docChanged) return;
 
       // Tree-growth effect: background parser advanced past where
@@ -833,14 +854,15 @@ const inlinePreviewPlugin = ViewPlugin.fromClass(
       // parse didn't reach the end, later blocks (headings, lists,
       // etc.) render as raw `##`/`**` until this fires.
       let treeGrew = false;
+      // `refreshLinkWidgets` or a reconfigured `linkWidgets()` facet:
+      // the host's answer may have changed without a document change.
+      let linkWidgetsChanged =
+        update.startState.facet(linkWidgetsFacet) !== update.state.facet(linkWidgetsFacet);
       for (const tr of update.transactions) {
         for (const effect of tr.effects) {
-          if (effect.is(treeGrowthEffect)) {
-            treeGrew = true;
-            break;
-          }
+          if (effect.is(treeGrowthEffect)) treeGrew = true;
+          else if (effect.is(refreshLinkWidgets)) linkWidgetsChanged = true;
         }
-        if (treeGrew) break;
       }
 
       // Note: `update.viewportChanged` is intentionally NOT in this
@@ -856,7 +878,8 @@ const inlinePreviewPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.focusChanged ||
-        treeGrew
+        treeGrew ||
+        linkWidgetsChanged
       ) {
         // An edit forces the whole document as before; a growth tick
         // walks what the idle loop parsed; a cursor or focus change
