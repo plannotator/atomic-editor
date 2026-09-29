@@ -286,7 +286,7 @@ raw `[text](url)` for editing, and the widget returns once the caret leaves
 or the editor blurs.
 
 ```tsx
-import { WidgetType } from '@codemirror/view';
+import { WidgetType, type EditorView } from '@codemirror/view';
 import {
   AtomicCodeMirrorEditor,
   linkWidgets,
@@ -295,23 +295,55 @@ import {
 } from '@atomic-editor/editor';
 
 class DecisionChip extends WidgetType {
-  constructor(readonly id: string, readonly text: string) { super(); }
-  eq(other: DecisionChip) { return other.id === this.id && other.text === this.text; }
-  toDOM() {
+  constructor(readonly id: string, readonly text: string,
+              readonly from: number, readonly to: number) { super(); }
+  eq(other: DecisionChip) {
+    return other.id === this.id && other.text === this.text
+      && other.from === this.from && other.to === this.to;
+  }
+  toDOM(view: EditorView) {
     const chip = document.createElement('span');
     chip.className = 'decision-chip';
     chip.textContent = this.text;
+    chip.addEventListener('mousedown', (e) => this.press(view, e));
     chip.addEventListener('click', () => openDecision(this.id));
     return chip;
   }
-  // `ignoreEvent` defaults to true, so CodeMirror leaves presses on the
-  // chip alone and the click reaches the listener above.
+  // `ignoreEvent` keeps its default (true), and `press` prevents the native
+  // mousedown, so a click neither moves the caret nor reveals the source.
+  // Preventing the press also stops the browser's own drag-selection, so the
+  // widget runs its own: past 4 px, select from the chip's far edge to the
+  // pointer, and swallow the click that ends the drag.
+  private press(view: EditorView, down: MouseEvent) {
+    if (down.button !== 0) return;
+    down.preventDefault();
+    let dragging = false;
+    const move = (e: MouseEvent) => {
+      if (!dragging && Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) < 4) return;
+      dragging = true;
+      const head = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
+      const anchor = head >= this.to ? this.from : this.to;
+      view.dispatch({ selection: { anchor, head } });
+      view.focus();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      if (!dragging) return;
+      const swallow = (e: MouseEvent) => e.stopPropagation();
+      window.addEventListener('click', swallow, { capture: true, once: true });
+      // No click follows a release outside the window; don't eat a later one.
+      setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
 }
 
 const decisions: LinkWidgetSpec = {
-  match: ({ url, text }) => {
+  match: ({ url, text, from, to }) => {
     const id = decisionIdFromUrl(url);
-    return id && cache.has(id) ? new DecisionChip(id, text) : null;
+    return id && cache.has(id) ? new DecisionChip(id, text, from, to) : null;
   },
 };
 
@@ -328,17 +360,26 @@ view.dispatch({ effects: refreshLinkWidgets.of(null) });
   `match` runs during the decoration build: synchronous, no side effects.
 - The engine calls `match` on every rebuild (selection, focus, edits), so
   implement `eq` on your widget; that is what keeps its DOM across rebuilds.
-  Compare `from`/`to` in `eq` only if two occurrences of one link must stay
-  distinct.
+  Compare `from`/`to` in `eq` when the widget reads them (the drag handler
+  above does, so an edit that shifts the link redraws it with fresh positions)
+  or when two occurrences of one link must stay distinct.
 - The widget replaces the whole link: no `.cm-atomic-link` underline, no
   external-link icon, and the engine's link opener never sees its clicks.
-- Clicks: keep `ignoreEvent`'s default (true). A click then reaches your
-  widget's own listener and does not move the caret, so the widget stays
-  drawn. A click does focus the editor, and focus follows the reveal rule:
-  if the editor's caret was already inside that same link when it lost
-  focus, regaining focus reveals the source. Calling `preventDefault()` on
-  `mousedown` in the widget avoids that (the editor does not take focus),
-  at the cost of blocking a text drag-selection that starts on the widget.
+- Clicks and drags: keep `ignoreEvent`'s default (true) **and** call
+  `preventDefault()` on `mousedown` in the widget, as above. Either half
+  alone falls short:
+  - The default `ignoreEvent` without `preventDefault` makes a plain click
+    clean. But a drag-selection that starts on the widget selects nothing:
+    CodeMirror ignores the press, and the browser's own selection inside the
+    widget reads back as collapsed.
+  - Letting CodeMirror take the press (`ignoreEvent` returning false) fixes
+    that drag but moves the caret into the link, which reveals the source on
+    click.
+  - With both, the editor does not take focus on a click, so the source stays
+    hidden even when the caret was inside that link when the editor lost
+    focus. The cost is that the widget owns drag-selection that starts on it:
+    select from the widget's far edge to the pointer once it moves past a few
+    pixels, and swallow the click that ends the drag.
 - `refreshLinkWidgets` is an effect-only transaction: it rebuilds and asks
   `match` again without changing the document or adding history. Dispatch it
   outside any update. A refresh during a held pointer press waits for the
