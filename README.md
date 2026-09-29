@@ -329,9 +329,11 @@ class DecisionChip extends WidgetType {
     const up = () => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
-      if (dragging) {
-        window.addEventListener('click', (e) => e.stopPropagation(), { capture: true, once: true });
-      }
+      if (!dragging) return;
+      const swallow = (e: MouseEvent) => e.stopPropagation();
+      window.addEventListener('click', swallow, { capture: true, once: true });
+      // No click follows a release outside the window; don't eat a later one.
+      setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
