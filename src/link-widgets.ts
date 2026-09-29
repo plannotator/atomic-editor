@@ -61,6 +61,9 @@ export const linkWidgetsFacet = Facet.define<readonly LinkWidgetSpec[], readonly
  */
 export const refreshLinkWidgets = StateEffect.define<null>();
 
+// Specs whose `match` threw, so each is logged once, not per rebuild.
+const loggedSpecs = new WeakSet<LinkWidgetSpec>();
+
 /**
  * Register host link drawers, read by the engine's own link decorator
  * (`inlinePreview()`). Specs are asked in registration order; several
@@ -74,7 +77,8 @@ export function linkWidgets(...specs: LinkWidgetSpec[]): Extension {
  * Ask the registered specs for a widget for a single-line inline Link
  * node. Returns null for anything the seam does not offer: links
  * without a `(url)` destination (reference, shortcut and wiki-link
- * interiors), links spanning a line break, or when no spec answers.
+ * interiors), links spanning a line break, links inside a table,
+ * links whose text holds an image, or when no spec answers.
  */
 export function matchLinkWidget(
   state: EditorState,
@@ -84,9 +88,22 @@ export function matchLinkWidget(
   if (specs.length === 0) return null;
   const { doc } = state;
   if (doc.lineAt(node.from).number !== doc.lineAt(node.to).number) return null;
-  // `[[target|label]]` parses its inner `[…]` as a Link; never offer a
-  // link that sits inside wiki-link brackets.
-  if (node.from > 0 && doc.sliceString(node.from - 1, node.from) === '[') return null;
+  // Never offer a link the `wikiLinks()` scanner could claim. That scanner
+  // pairs a `[[` with the next `]]` on the line and ignores escapes, so a
+  // link opened right after a `[` is refused only when a `]]` follows it on
+  // the same line; `[[a](url)` and `\[[a](url)` (no closing `]]`) are offered.
+  if (node.from > 0 && doc.sliceString(node.from - 1, node.from) === '[') {
+    const line = doc.lineAt(node.from);
+    if (doc.sliceString(node.from, line.to).includes(']]')) return null;
+  }
+  // Table cells are drawn by the table widget, which does not read this
+  // seam; do not ask hosts about links they can never draw.
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (parent.name === 'Table') return null;
+  }
+  // `[![alt](src)](url)`: an image inside the link text stays on the
+  // engine's own rendering.
+  if (node.getChild('Image')) return null;
 
   const urlNode = node.getChild('URL');
   if (!urlNode) return null;
@@ -120,9 +137,12 @@ export function matchLinkWidget(
       widget = spec.match(link);
     } catch (error) {
       // A throwing host spec must not take the whole inline preview down
-      // (CM6 disables a plugin whose update throws). Log it and fall back
-      // to the engine's own link for this spec.
-      logException(state, error, 'linkWidgets match');
+      // (CM6 disables a plugin whose update throws). Fall through to the
+      // next spec, and log once per spec rather than on every rebuild.
+      if (!loggedSpecs.has(spec)) {
+        loggedSpecs.add(spec);
+        logException(state, error, 'linkWidgets match');
+      }
     }
     if (widget) return widget;
   }

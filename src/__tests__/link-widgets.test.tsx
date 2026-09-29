@@ -235,31 +235,40 @@ describe('linkWidgets', () => {
   });
 
   it('copies the markdown bytes across a drawn widget', async () => {
+    // Why this is shaped around a press: CM6 only intercepts copy when the
+    // DOM selection is inside a focused editor, and a focused selection
+    // that overlaps the link reveals its source (the engine's reveal rule).
+    // So the one moment a widget is on screen under a copyable selection is
+    // mid-drag, while the press holds the preview frozen. The drag here
+    // starts in the prose before the link, like a real one would, and the
+    // copy runs both mid-drag (widget drawn) and after release (revealed).
     const { host, view } = mount(SOURCE, [linkWidgets(chipSpec())]);
     focus(view);
     view.dispatch({ selection: { anchor: 0 } });
+    const copy = (): string | undefined => {
+      const data = new Map<string, string>();
+      const event = new Event('copy', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          clearData: () => data.clear(),
+          setData: (type: string, value: string) => data.set(type, value),
+          getData: (type: string) => data.get(type) ?? '',
+        },
+      });
+      view.contentDOM.dispatchEvent(event);
+      return data.get('text/plain');
+    };
 
-    // A drag that starts on the chip and selects the whole line: the
-    // press freezes the preview, so the widget is still drawn when the
-    // copy runs.
-    press(chips(host)[0]);
+    press(host.querySelector<HTMLElement>('.cm-line') as HTMLElement);
     withoutSelectionChange(() => {
       view.dispatch({ selection: { anchor: 0, head: SOURCE.length } });
     });
     expect(chips(host)).toHaveLength(1);
+    expect(copy()).toBe(SOURCE);
 
-    const data = new Map<string, string>();
-    const event = new Event('copy', { bubbles: true, cancelable: true });
-    Object.defineProperty(event, 'clipboardData', {
-      value: {
-        clearData: () => data.clear(),
-        setData: (type: string, value: string) => data.set(type, value),
-        getData: (type: string) => data.get(type) ?? '',
-      },
-    });
-    view.contentDOM.dispatchEvent(event);
-    expect(data.get('text/plain')).toBe(SOURCE);
     await release();
+    expect(chips(host)).toHaveLength(0);
+    expect(copy()).toBe(SOURCE);
   });
 
   it('draws a pasted link as the widget once the caret leaves', () => {
@@ -381,7 +390,38 @@ describe('linkWidgets', () => {
     expect(host.querySelector('.cm-atomic-link')).not.toBeNull();
   });
 
-  it('keeps the engine link when a spec throws', () => {
+  it('lets the first non-null spec win, in registration order', () => {
+    const nullSpec = { match: vi.fn(() => null) };
+    const first = { match: vi.fn((l: LinkWidgetLink) => new ChipWidget(l.url, `first ${l.text}`)) };
+    const second = { match: vi.fn((l: LinkWidgetLink) => new ChipWidget(l.url, `second ${l.text}`)) };
+    const { host } = mount(SOURCE, [linkWidgets(nullSpec, first), linkWidgets(second)]);
+
+    expect(chips(host).map((c) => c.textContent)).toEqual(['first Ship on Friday']);
+    expect(nullSpec.match).toHaveBeenCalled();
+    expect(second.match).not.toHaveBeenCalled();
+  });
+
+  it('falls through a throwing spec to the next one and logs it once', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const throwing = {
+        match: vi.fn(() => {
+          throw new Error('host bug');
+        }),
+      };
+      const { host, view } = mount(SOURCE, [linkWidgets(throwing, chipSpec())]);
+      expect(chips(host)).toHaveLength(1);
+
+      view.dispatch({ effects: refreshLinkWidgets.of(null) });
+      view.dispatch({ effects: refreshLinkWidgets.of(null) });
+      expect(throwing.match.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(error).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('keeps the engine link when the only spec throws', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const { host } = mount(SOURCE, [
@@ -395,6 +435,52 @@ describe('linkWidgets', () => {
     } finally {
       error.mockRestore();
     }
+  });
+
+  it('renders identically with no spec, an always-null spec, or no extension', () => {
+    const markdown = [
+      '# Title',
+      '',
+      'See [docs](https://example.com "Docs") and **[bold](x)** here.',
+      '',
+      '- [ ] a task with [a link](y)',
+      '',
+      '![img](z.png) and [ref][r] and <https://auto.example>',
+      '',
+      '[r]: https://ref.example',
+    ].join('\n');
+    const html = (extensions: Extension[]): string =>
+      mount(markdown, extensions).host.querySelector('.cm-content')?.innerHTML ?? '';
+
+    const baseline = html([]);
+    expect(baseline).toContain('cm-atomic-link');
+    expect(html([linkWidgets()])).toBe(baseline);
+    expect(html([linkWidgets({ match: () => null })])).toBe(baseline);
+  });
+
+  it('does not offer links inside tables or links whose text holds an image', () => {
+    const spec = chipSpec();
+    const markdown = [
+      '| Decision | Note |',
+      '| --- | --- |',
+      '| [Ship](dec://1) | ok |',
+      '',
+      '[![badge](dec://img.png)](dec://2)',
+      '',
+      'Outside: [Kept](dec://3).',
+    ].join('\n');
+    const { host } = mount(markdown, [linkWidgets(spec)]);
+
+    expect(spec.calls.map((c) => c.url)).toEqual(['dec://3']);
+    expect(chips(host).map((c) => c.textContent)).toEqual(['Kept']);
+  });
+
+  it('offers a link after a stray `[` unless a wiki link could claim it', () => {
+    const spec = chipSpec();
+    mount('A [[open](dec://1) and \\[[esc](dec://2) here.\n\nB [[x](dec://3)]] there.', [
+      linkWidgets(spec),
+    ]);
+    expect(spec.calls.map((c) => c.url)).toEqual(['dec://1', 'dec://2']);
   });
 });
 

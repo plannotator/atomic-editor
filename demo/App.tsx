@@ -10,6 +10,7 @@ import {
 import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages';
 import '@atomic-editor/editor/styles.css';
 import { DiffDemo } from './DiffDemo';
+import { LinkWidgetsDemo } from './LinkWidgetsDemo';
 import {
   SAMPLE_SIZES,
   generateSampleMarkdown,
@@ -108,10 +109,15 @@ function togglesToOptions(t: ContentToggles): SampleOptions {
   };
 }
 
-/** Routes the demo to the focused diff harness when `?mode=diff` is present. */
+/**
+ * Routes the demo to the focused diff harness (`?mode=diff`) or the
+ * link-widgets harness (`?mode=link-widgets`).
+ */
 export function App() {
   const mode = new URLSearchParams(window.location.search).get('mode');
-  return mode === 'diff' ? <DiffDemo /> : <EditorDemo />;
+  if (mode === 'diff') return <DiffDemo />;
+  if (mode === 'link-widgets') return <LinkWidgetsDemo />;
+  return <EditorDemo />;
 }
 
 function EditorDemo() {

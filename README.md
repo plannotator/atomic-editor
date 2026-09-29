@@ -301,11 +301,11 @@ class DecisionChip extends WidgetType {
     const chip = document.createElement('span');
     chip.className = 'decision-chip';
     chip.textContent = this.text;
-    // Keep a click from placing the caret (which would reveal the source).
-    chip.addEventListener('mousedown', (e) => e.preventDefault());
     chip.addEventListener('click', () => openDecision(this.id));
     return chip;
   }
+  // `ignoreEvent` defaults to true, so CodeMirror leaves presses on the
+  // chip alone and the click reaches the listener above.
 }
 
 const decisions: LinkWidgetSpec = {
@@ -332,13 +332,21 @@ view.dispatch({ effects: refreshLinkWidgets.of(null) });
   distinct.
 - The widget replaces the whole link: no `.cm-atomic-link` underline, no
   external-link icon, and the engine's link opener never sees its clicks.
+- Clicks: keep `ignoreEvent`'s default (true). A click then reaches your
+  widget's own listener and does not move the caret, so the widget stays
+  drawn. A click does focus the editor, and focus follows the reveal rule:
+  if the editor's caret was already inside that same link when it lost
+  focus, regaining focus reveals the source. Calling `preventDefault()` on
+  `mousedown` in the widget avoids that (the editor does not take focus),
+  at the cost of blocking a text drag-selection that starts on the widget.
 - `refreshLinkWidgets` is an effect-only transaction: it rebuilds and asks
   `match` again without changing the document or adding history. Dispatch it
   outside any update. A refresh during a held pointer press waits for the
   release. Reconfiguring the `linkWidgets()` extension also rebuilds.
 - Only single-line inline links are offered. Revealed links, multi-line links,
-  images, reference links, autolinks and wiki links are unchanged, and so are
-  links inside table cells (they keep the link look for now).
+  images, links whose text holds an image (`[![alt](src)](url)`), reference
+  links, autolinks and wiki links are unchanged, and so are links inside
+  tables (they keep the link look for now; `match` is not called for them).
 
 ## Theming
 
