@@ -274,6 +274,72 @@ debounced and cached. See [`src/wiki-links.ts`](./src/wiki-links.ts) for the
 full config — custom serialization, resolver policies, suggestion limits, and
 the `WikiLinkSuggestion` / `WikiLinkResolvedTarget` types.
 
+## Link widgets
+
+`linkWidgets()` lets a host draw an ordinary `[text](url)` link as its own
+widget — a chip, a mention, a status pill — while the markdown stays the
+link, byte for byte. It is read by the engine's own link decorator, so the
+widget follows exactly the rule that hides a link's syntax today: the caret
+entering the link (from inside or from either edge), a selection overlapping
+it, focus, the pointer-press freeze and diff-changed ranges all reveal the
+raw `[text](url)` for editing, and the widget returns once the caret leaves
+or the editor blurs.
+
+```tsx
+import { WidgetType } from '@codemirror/view';
+import {
+  AtomicCodeMirrorEditor,
+  linkWidgets,
+  refreshLinkWidgets,
+  type LinkWidgetSpec,
+} from '@atomic-editor/editor';
+
+class DecisionChip extends WidgetType {
+  constructor(readonly id: string, readonly text: string) { super(); }
+  eq(other: DecisionChip) { return other.id === this.id && other.text === this.text; }
+  toDOM() {
+    const chip = document.createElement('span');
+    chip.className = 'decision-chip';
+    chip.textContent = this.text;
+    // Keep a click from placing the caret (which would reveal the source).
+    chip.addEventListener('mousedown', (e) => e.preventDefault());
+    chip.addEventListener('click', () => openDecision(this.id));
+    return chip;
+  }
+}
+
+const decisions: LinkWidgetSpec = {
+  match: ({ url, text }) => {
+    const id = decisionIdFromUrl(url);
+    return id && cache.has(id) ? new DecisionChip(id, text) : null;
+  },
+};
+
+<AtomicCodeMirrorEditor extensions={[linkWidgets(decisions)]} markdownSource={source} />;
+
+// Later, when the cache fills without a document change:
+view.dispatch({ effects: refreshLinkWidgets.of(null) });
+```
+
+- `match(link)` receives `{ url, text, title?, from, to }`: the URL and link
+  text as written (escapes included), the title without its quotes, and the
+  link's document range. Return a `WidgetType` to draw it, or `null` for the
+  engine's own link. Specs are asked in order; the first non-null answer wins.
+  `match` runs during the decoration build: synchronous, no side effects.
+- The engine calls `match` on every rebuild (selection, focus, edits), so
+  implement `eq` on your widget; that is what keeps its DOM across rebuilds.
+  Compare `from`/`to` in `eq` only if two occurrences of one link must stay
+  distinct.
+- The widget replaces the whole link: no `.cm-atomic-link` underline, no
+  external-link icon, and the engine's link opener never sees its clicks.
+- `refreshLinkWidgets` is an effect-only transaction: it rebuilds and asks
+  `match` again without changing the document or adding history. Dispatch it
+  outside any update. A refresh during a held pointer press waits for the
+  release. Reconfiguring the `linkWidgets()` extension also rebuilds.
+- Only single-line inline links are offered. Revealed links, multi-line links,
+  images, reference links, autolinks and wiki links are unchanged, and so are
+  links inside table cells (they keep the link look for now).
+
 ## Theming
 
 Every color, font, and size reads from a CSS custom property with an
@@ -370,6 +436,7 @@ import {
   imageBlocks,   // rendered image widgets
   tables,        // WYSIWYG table widget
   wikiLinks,     // [[...]] links
+  linkWidgets,   // host widgets for [text](url) links
   atomicEditorTheme,
   atomicMarkdownSyntax,
   extendEmphasisPair,

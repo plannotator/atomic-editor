@@ -9,6 +9,37 @@ changes as the public surface stabilizes.
 
 ## [Unreleased]
 
+## [0.9.0]
+
+### Added
+
+- **`linkWidgets(...specs)`**, a host seam on the engine's own link
+  decorator. Each `LinkWidgetSpec` has a synchronous
+  `match(link: LinkWidgetLink): WidgetType | null`, where `LinkWidgetLink`
+  is `{ url, text, title?, from, to }`. For a single-line inline
+  `[text](url)` link whose syntax would be hidden (not revealed by the
+  caret, focus, the pointer-press freeze, or a diff change), the first
+  non-null widget replaces the whole link range instead of the
+  `cm-atomic-link` mark and the hidden-syntax replaces: no underline, no
+  external-link icon, no link-opener hit zone. Revealed links, multi-line
+  links, images, reference links, autolinks and wiki links are unchanged.
+  `eq` is the widget author's: the engine asks `match` on every rebuild.
+- **`refreshLinkWidgets`**, a `StateEffectType<null>`. An effect-only
+  transaction carrying it rebuilds link decorations and asks `match`
+  again, with no document change and no history entry, for hosts whose
+  answer changes after mount. A reconfigured `linkWidgets()` facet also
+  rebuilds. While a pointer press holds the preview frozen the rebuild
+  waits for the release.
+
+### Not yet covered
+
+- Links inside table cells are drawn by the table widget's own cell
+  renderer, which edits cell text as contenteditable DOM rather than
+  through CodeMirror decorations. They keep the link look in this release;
+  offering them to `linkWidgets` specs follows in a later release.
+
+## [0.8.1]
+
 ### Changed
 
 - The mount-time syntax tree is bounded to an initial window (16 KB or
